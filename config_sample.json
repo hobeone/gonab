@@ -1,0 +1,15 @@
+{
+  "NewsServer": {
+    "Host": "newsserver.com",
+    "Port": 563,
+    "Username": "username",
+    "Password": "password",
+    "UseTLS": true
+  },
+  "DB": {
+    "Path": "/path/to/gonab.db",
+    "Verbose": true,
+    "UpdateDB": true,
+    "Type": "file"
+  }
+}
