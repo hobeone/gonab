@@ -22,7 +22,10 @@ _testmain.go
 *.exe
 *.test
 *.prof
+*.swp
 
 # Config
 config.json
-db.sql
+*.db
+*.db-wal
+*.db-shm

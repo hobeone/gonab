@@ -29,9 +29,9 @@ type Release struct {
 	Size         int64
 	Group        Group
 	GroupID      sql.NullInt64
+	NZB          string `sql:"size:0" gorm:"column:nzb"`
 	// Category
 	// Regex
-	// NZB
 }
 
 // Binary struct

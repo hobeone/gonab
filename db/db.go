@@ -4,10 +4,12 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"fmt"
-	"io/ioutil"
+	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 
+	"github.com/OneOfOne/xxhash"
 	"github.com/Sirupsen/logrus"
 	"github.com/davecgh/go-spew/spew"
 	"github.com/hobeone/gonab/nzb"
@@ -75,37 +77,47 @@ func setupDB(db gorm.DB) error {
 	return nil
 }
 
-func createAndOpenDb(dbPath string, verbose bool, memory bool) *Handle {
+func constructDBPath(dbpath string, memory bool) string {
 	mode := "rwc"
 	if memory {
 		mode = "memory"
 	}
-	constructedPath := fmt.Sprintf("file:%s?cache=shared&mode=%s", dbPath, mode)
+	return fmt.Sprintf("file:%s?cache=shared&mode=%s", dbpath, mode)
+}
+
+// CreateAndMigrateDB will create a new database on disk and create all tables.
+func CreateAndMigrateDB(dbpath string, verbose bool) (*Handle, error) {
+	constructedPath := constructDBPath(dbpath, false)
+	db := openDB("sqlite3", constructedPath, verbose)
+	err := setupDB(db)
+	if err != nil {
+		return nil, err
+	}
+	return &Handle{DB: db}, nil
+}
+
+// NewDBHandle creates a new DBHandle
+//	dbpath: the path to the database to use.
+//	verbose: when true database accesses are logged to stdout
+func NewDBHandle(dbpath string, verbose bool) *Handle {
+	constructedPath := constructDBPath(dbpath, false)
+	db := openDB("sqlite3", constructedPath, verbose)
+	return &Handle{DB: db}
+}
+
+// NewMemoryDBHandle creates a new in memory database.  Only used for testing.
+// The name of the database is a random string so multiple tests can run in
+// parallel with their own database.  This will setup the database with the
+// all the tables as well.
+func NewMemoryDBHandle(verbose bool) *Handle {
+	dbpath := randString()
+	constructedPath := constructDBPath(dbpath, true)
 	db := openDB("sqlite3", constructedPath, verbose)
 	err := setupDB(db)
 	if err != nil {
 		panic(err.Error())
 	}
 	return &Handle{DB: db}
-}
-
-// NewDBHandle creates a new DBHandle
-//	dbPath: the path to the database to use.
-//	verbose: when true database accesses are logged to stdout
-//	writeUpdates: when true actually write to the databse (useful for testing)
-func NewDBHandle(dbPath string, verbose bool, writeUpdates bool) *Handle {
-	d := createAndOpenDb(dbPath, verbose, false)
-	d.writeUpdates = writeUpdates
-	return d
-}
-
-// NewMemoryDBHandle creates a new in memory database.  Only used for testing.
-// The name of the database is a random string so multiple tests can run in
-// parallel with their own database.
-func NewMemoryDBHandle(verbose bool, writeUpdates bool) *Handle {
-	d := createAndOpenDb(randString(), verbose, true)
-	d.writeUpdates = writeUpdates
-	return d
 }
 
 func randString() string {
@@ -147,15 +159,117 @@ func (d *Handle) FindGroupByName(name string) (*types.Group, error) {
 	return &g, nil
 }
 
+// GetActiveGroups returns all groups marked active in the db
+func (d *Handle) GetActiveGroups() ([]types.Group, error) {
+	var g []types.Group
+	err := d.DB.Where("active = ?", true).Find(&g).Error
+	if err != nil {
+		return nil, err
+	}
+	return g, nil
+}
+
+// PartRegex Comment
+var PartRegex = regexp.MustCompile(`(?i)[\[\( ]((\d{1,3}\/\d{1,3})|(\d{1,3} of \d{1,3})|(\d{1,3}-\d{1,3})|(\d{1,3}~\d{1,3}))[\)\] ]`)
+
+func hasNameAndParts(m map[string]string) bool {
+	_, nameok := m["name"]
+	_, partok := m["parts"]
+	return nameok && partok
+}
+
+func makeBinaryHash(name, group, from, totalParts string) string {
+	h := xxhash.New64()
+	h.Write([]byte(name + group + from + totalParts))
+	return fmt.Sprintf("%x", h.Sum64())
+}
+
 // MakeBinaries comment
 func (d *Handle) MakeBinaries() error {
-	var groupnames []string
-	err := d.DB.Model(&types.Part{}).Group(`"group"`).Pluck(`"group"`, &groupnames).Error
+	r := `(?i).*?(?P<parts>\d{1,3}\/\d{1,3}).*?\"(?P<name>.*?)\.(sample|mkv|Avi|mp4|vol|ogm|par|rar|sfv|nfo|nzb|srt|ass|mpg|txt|zip|wmv|ssa|r\d{1,3}|7z|tar|mov|divx|m2ts|rmvb|iso|dmg|sub|idx|rm|ac3|t\d{1,2}|u\d{1,3})`
+	rc := types.RegexpUtil{regexp.MustCompile(r)}
+	var parts []types.Part
+	err := d.DB.Where("binary_id is NULL").Find(&parts).Error
 	if err != nil {
 		return err
 	}
-	for _, name := range groupnames {
-		fmt.Printf("Group: %s\n", name)
+
+	binaries := map[string]*types.Binary{}
+
+	for _, p := range parts {
+
+		m := rc.FindStringSubmatchMap(p.Subject)
+		if len(m) > 0 {
+			for k, v := range m {
+				m[k] = strings.TrimSpace(v)
+			}
+		}
+		// fill name if reqid is available
+		if reqid, ok := m["reqid"]; ok {
+			if _, okname := m["name"]; !okname {
+				m["name"] = reqid
+			}
+		}
+
+		// Generate a name if we don't have one
+		if _, ok := m["name"]; !ok {
+			var matchvalues []string
+			for _, v := range m {
+				matchvalues = append(matchvalues, v)
+			}
+			m["name"] = strings.Join(matchvalues, " ")
+		}
+
+		// Look for parts manually if the regex didn't return some
+		if _, ok := m["parts"]; !ok {
+			partmatch := PartRegex.FindStringSubmatch(p.Subject)
+			if partmatch != nil {
+				m["parts"] = partmatch[1]
+			}
+		}
+		if !hasNameAndParts(m) {
+			fmt.Printf("Couldn't find Name and Parts for %s\n", p.Subject)
+			spew.Dump(m)
+			continue
+		}
+
+		// Clean name of '-', '~', ' of '
+		if strings.Index(m["parts"], "/") == -1 {
+			m["parts"] = strings.Replace(m["parts"], "-", "/", -1)
+			m["parts"] = strings.Replace(m["parts"], "~", "/", -1)
+			m["parts"] = strings.Replace(m["parts"], " of ", "/", -1)
+			m["parts"] = strings.Replace(m["parts"], "[", "", -1)
+			m["parts"] = strings.Replace(m["parts"], "]", "", -1)
+			m["parts"] = strings.Replace(m["parts"], "(", "", -1)
+			m["parts"] = strings.Replace(m["parts"], ")", "", -1)
+		}
+
+		if strings.Index(m["parts"], "/") == -1 {
+			fmt.Printf("Couldn't find valid parts information for %s (%s didn't include /)\n", p.Subject, m["parts"])
+			continue
+		}
+
+		partcounts := strings.SplitN(m["parts"], "/", 2)
+
+		binhash := makeBinaryHash(m["name"], p.Group, p.From, partcounts[1])
+		if bin, ok := binaries[binhash]; ok {
+			bin.Parts = append(bin.Parts, p)
+		} else {
+			totalparts, _ := strconv.Atoi(partcounts[1])
+			binaries[binhash] = &types.Binary{
+				Hash:       binhash,
+				Name:       m["name"],
+				Posted:     p.Posted,
+				From:       p.From,
+				Parts:      []types.Part{p},
+				Group:      p.Group,
+				TotalParts: totalparts,
+			}
+		}
+		err = d.DB.Save(binaries[binhash]).Error
+		if err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -188,8 +302,8 @@ func (d *Handle) MakeReleases() error {
 			) as part
 			ON binary.id = part.binary_id
 	GROUP BY binary.id
-	HAVING count(*) >= binary.total_parts AND (sum(part.available_segments) / sum(part.total_segments)) * 100 >= 100
-	ORDER BY binary.posted DESC LIMIT 1`
+	HAVING count(*) >= binary.total_parts AND (sum(part.available_segments) / sum(part.total_segments)) * 100 >= ?
+	ORDER BY binary.posted DESC`
 	err := d.DB.Raw(q, 100).Scan(&binaries).Error
 	if err != nil {
 		return err
@@ -199,7 +313,6 @@ func (d *Handle) MakeReleases() error {
 		dbrel := &types.Release{}
 		err := d.DB.Where("name = ? and posted = ?", b.Name, b.Posted).First(&dbrel).Error
 		if err != nil && err != gorm.RecordNotFound {
-			spew.Dump(err)
 			return err
 		}
 		if dbrel.ID != 0 {
@@ -220,7 +333,10 @@ func (d *Handle) MakeReleases() error {
 		if err != nil {
 			logrus.Errorf("Unknown group %s for binary %d: %s", b.Group, b.ID, b.Name)
 		}
-
+		nzbstr, err := nzb.WriteNZB(dbbin)
+		if err != nil {
+			return err
+		}
 		newrel := &types.Release{
 			Name:         b.Name,
 			OriginalName: b.Name,
@@ -229,25 +345,41 @@ func (d *Handle) MakeReleases() error {
 			From:         b.From,
 			Group:        *grp,
 			Size:         dbbin.Size(),
+			NZB:          nzbstr,
 		}
 
-		nzbstr, err := nzb.WriteNZB(dbbin)
-		if err != nil {
-			return err
-		}
-		fmt.Println(nzbstr)
 		// Categorize
 
 		// Check if size is too small
 		// Check if too few files
-		spew.Dump(newrel)
-		err = ioutil.WriteFile("tesst.nzb", []byte(nzbstr), 0644)
+		tx := d.DB.Begin()
+		err = tx.Save(newrel).Error
 		if err != nil {
+			tx.Rollback()
 			return err
 		}
-		//spew.Dump(dbbin)
+		partids := make([]int64, len(dbbin.Parts))
+		for i, p := range dbbin.Parts {
+			partids[i] = p.ID
+		}
+		err = tx.Where("binary_id = ?", dbbin.ID).Delete(types.Part{}).Error
+		if err != nil {
+			tx.Rollback()
+			return err
+		}
 
-		//Create NZB
+		err = tx.Where("part_id in (?)", partids).Delete(types.Segment{}).Error
+		if err != nil {
+			tx.Rollback()
+			return err
+		}
+
+		err = tx.Delete(dbbin).Error
+		if err != nil {
+			tx.Rollback()
+			return err
+		}
+		tx.Commit()
 	}
 	return nil
 }

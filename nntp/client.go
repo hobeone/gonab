@@ -75,12 +75,11 @@ func (n *NNTPClient) GroupScanForward(dbh *db.Handle, group string, limit int) (
 		g.Last = nntpGroup.High - int64(limit)
 	}
 	if g.First < nntpGroup.Low {
-		log.Errorf("Group %s first article was older than first on server, resetting to %d", g.Name, nntpGroup.Low)
+		log.Errorf("Group %s first article was older than first on server (%d < %d), resetting to %d", g.Name, g.First, nntpGroup.Low, nntpGroup.Low)
 		g.First = nntpGroup.Low
 	}
 	if g.Last > nntpGroup.High {
-
-		log.Errorf("Group %s last article is newer than on server, resetting to %d.", g.Name, nntpGroup.High)
+		log.Errorf("Group %s last article is newer than on server (%d > %d), resetting to %d.", g.Name, g.Last, nntpGroup.High, nntpGroup.High)
 	}
 	err = dbh.DB.Save(g).Error
 	if err != nil {

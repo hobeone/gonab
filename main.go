@@ -1,34 +1,13 @@
 package main
 
-import log "github.com/Sirupsen/logrus"
+import (
+	"os"
 
-func init() {
-	log.SetLevel(log.DebugLevel)
-}
+	"gopkg.in/alecthomas/kingpin.v2"
 
-/*
-*
-* Parts Table:
-* id bigint
-* hash bigint index
-* subject 512 string
-* total_segments int index
-* Posted datetime index
-* From string 200
-* xref string 1024
-* group_name string 200 index
-* binary.id belongs_to
-* segments has many
-*
-* Segments
-* id bigint
-* segment int
-* size int
-* message_id string 256
-* part_id belongs to
-*
- */
+	"github.com/hobeone/gonab/commands"
+)
 
 func main() {
-
+	kingpin.MustParse(commands.App.Parse(os.Args[1:]))
 }
