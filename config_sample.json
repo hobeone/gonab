@@ -11,5 +11,8 @@
     "Verbose": true,
     "UpdateDB": true,
     "Type": "file"
+  },
+  "Regex": {
+    "URL": "https://localhost/path/regex?key=xxx"
   }
 }

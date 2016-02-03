@@ -55,7 +55,7 @@ func openDB(dbType string, dbArgs string, verbose bool) gorm.DB {
 
 func setupDB(db gorm.DB) error {
 	tx := db.Begin()
-	err := tx.AutoMigrate(&types.Group{}, &types.Release{}, &types.Binary{}, &types.Part{}, &types.Segment{}).Error
+	err := tx.AutoMigrate(&types.Group{}, &types.Release{}, &types.Binary{}, &types.Part{}, &types.Segment{}, &types.Regex{}).Error
 	if err != nil {
 		tx.Rollback()
 		return err

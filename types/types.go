@@ -75,6 +75,28 @@ type Segment struct {
 	PartID    sql.NullInt64
 }
 
+/*
+* CREATE TABLE "collection_regexes" (
+	*   "id" int(10)  NOT NULL ,
+	*     "group_regex" varchar(255) NOT NULL DEFAULT '',
+	*       "regex" varchar(5000) NOT NULL DEFAULT '',
+	*         "status" tinyint(1)  NOT NULL DEFAULT '1',
+	*           "description" varchar(1000) NOT NULL,
+	*             "ordinal" int(11) NOT NULL DEFAULT '0',
+	*               PRIMARY KEY ("id")
+	*               );
+	*
+*/
+
+type CollectionRegex struct {
+	ID          int
+	GroupRegex  string
+	Status      bool
+	Description string
+	Ordinal     int
+	Regex       string
+}
+
 // Regex Comment
 type Regex struct {
 	ID          int

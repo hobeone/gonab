@@ -17,6 +17,7 @@ import (
 type Config struct {
 	NewsServer newsServer
 	DB         dbConfig
+	Regex      regexSource
 }
 
 type newsServer struct {
@@ -33,10 +34,15 @@ type dbConfig struct {
 	Type     string // file or memory (for testing)
 }
 
+type regexSource struct {
+	URL string //
+}
+
 // NewConfig returns a new Config struct with defaults filled out
 func NewConfig() *Config {
 	return &Config{
 		NewsServer: newsServer{},
+		Regex:      regexSource{},
 		DB: dbConfig{
 			Verbose:  true,
 			UpdateDB: true,

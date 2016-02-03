@@ -2,12 +2,12 @@ package types
 
 import "regexp"
 
-// embed regexp.Regexp in a new type so we can extend it
+// RegexpUtil embed regexp.Regexp in a new type so we can extend it
 type RegexpUtil struct {
 	*regexp.Regexp
 }
 
-// add a new method to our new regular expression type
+// FindStringSubmatchMap returns named matches in a map
 func (r *RegexpUtil) FindStringSubmatchMap(s string) map[string]string {
 	captures := make(map[string]string)
 

@@ -1,12 +1,11 @@
 package main
 
-import (
-	"testing"
+import "testing"
 
-	"github.com/hobeone/gonab/db"
-)
+func TestRegex(t *testing.T) {
+	err := convertRegexes()
+	if err != nil {
+		t.Fatalf("Error %v", err)
+	}
 
-func TestPrintParts(t *testing.T) {
-	dbh := db.NewMemoryDBHandle(true, true)
-	dbh.ListParts()
 }

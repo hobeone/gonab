@@ -18,4 +18,7 @@ var (
 
 	rcmd     = &ReleasesCommand{}
 	releases = App.Command("makereleases", "Create releases from binaries").Action(rcmd.run)
+
+	regexcmd    = &RegexImporter{}
+	regexcmdrun = App.Command("importregex", "Import regexes from nzedb").Action(regexcmd.run)
 )
