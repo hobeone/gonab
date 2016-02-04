@@ -26,6 +26,8 @@ var nnpplusRegexURL = `http://www.newznab.com/getregex.php?newznabID=%s`
 //RegexImporter comment
 type RegexImporter struct{}
 
+var regexWithOption = regexp.MustCompile(`\/(\w+)$`)
+
 // parsed order:
 // 0 full string
 // 1 id
@@ -52,9 +54,16 @@ func newzNabRegexToRegex(parsed []string) (*types.Regex, error) {
 	if err != nil {
 		logrus.Errorf("Couldn't parse ordinal %s, skipping", parsed[6])
 	}
-	regex := strings.TrimRight(parsed[3], "/")
-	regex = strings.TrimLeft(regex, "/")
-
+	regex := strings.TrimLeft(parsed[3], "/")
+	regexOpts := regexWithOption.FindStringSubmatch(parsed[3])
+	if regexOpts != nil {
+		if strings.Contains(regexOpts[1], "i") {
+			regex = fmt.Sprintf("(?i)") + regex // add re2 ignore case option
+		}
+		regex = strings.TrimRight(regex, regexOpts[0])
+	} else {
+		regex = strings.TrimRight(parsed[3], "/")
+	}
 	dbregex := types.Regex{
 		ID:          id,
 		GroupName:   parsed[2],
