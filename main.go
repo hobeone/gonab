@@ -9,5 +9,6 @@ import (
 )
 
 func main() {
+	commands.SetupCommands()
 	kingpin.MustParse(commands.App.Parse(os.Args[1:]))
 }

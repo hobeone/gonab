@@ -6,30 +6,37 @@ import (
 	"gopkg.in/alecthomas/kingpin.v2"
 )
 
+func (r *ReleasesCommand) configure(app *kingpin.Application) {
+	rgrp := App.Command("releases", "manipulate releases")
+	rgrp.Command("make", "Create releases from binaries").Action(r.run)
+
+	rgrpList := rgrp.Command("list", "List releases").Action(r.list)
+	rgrpList.Flag("limit", "Number of releases to list").Short('l').Default("10").IntVar(&r.Limit)
+}
+
 var (
 	// App is the main hook to run
 	App        = kingpin.New("gonab", "A usenet indexer")
 	debug      = App.Flag("debug", "Enable Debug mode.").Bool()
 	debugdb    = App.Flag("debugdb", "Log Database queries (noisy).").Default("false").Bool()
 	configfile = App.Flag("config", "Config file to use").Default("config.json").ExistingFile()
-
-	scanner = &ScanCommand{}
-	s       = App.Command("scan", "Scan usenet groups for new articles").Action(scanner.scan)
-
-	dbcreate = App.Command("createdb", "Create Database and Tables.").Action(createdb)
-
-	bcmd     = &BinariesCommand{}
-	binaries = App.Command("makebinaries", "Create binaries from parts").Action(bcmd.run)
-
-	rcmd = &ReleasesCommand{}
-
-	rgrp     = App.Command("releases", "manipulate releases")
-	releases = rgrp.Command("make", "Create releases from binaries").Action(rcmd.run)
-	rgrpList = rgrp.Command("list", "List releases").Action(rcmd.list)
-
-	regexcmd    = &RegexImporter{}
-	regexcmdrun = App.Command("importregex", "Import regexes from nzedb").Action(regexcmd.run)
 )
+
+func SetupCommands() {
+	rcmd := &ReleasesCommand{}
+	rcmd.configure(App)
+
+	scanner := &ScanCommand{}
+	App.Command("scan", "Scan usenet groups for new articles").Action(scanner.scan)
+
+	App.Command("createdb", "Create Database and Tables.").Action(createdb)
+
+	bcmd := &BinariesCommand{}
+	App.Command("makebinaries", "Create binaries from parts").Action(bcmd.run)
+
+	regexcmd := &RegexImporter{}
+	App.Command("importregex", "Import regexes from nzedb").Action(regexcmd.run)
+}
 
 func loadConfig(cfile string) *config.Config {
 	if len(cfile) == 0 {

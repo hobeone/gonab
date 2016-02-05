@@ -116,21 +116,19 @@ func (d *Handle) CreatePart(p *types.Part) error {
 	return d.DB.Save(p).Error
 }
 
-// ListParts func
-func (d *Handle) ListParts() {
-	rows, err := d.DB.Table("part").Select("id, subject, total_segments").Limit(10).Rows()
+// ListReleases func
+func (d *Handle) ListReleases(limit int) error {
+	var rels []types.Release
+	err := d.DB.Limit(limit).Find(&rels).Error
 	if err != nil {
-		fmt.Println(err)
-		return
+		return err
 	}
 
-	defer rows.Close()
-	var id, subject, segs string
-	for rows.Next() {
-		rows.Scan(&id, &subject, &segs)
-		fmt.Printf("Part(%s): %s\n", id, subject)
-		fmt.Printf("  Segments: %s\n", segs)
+	for _, rel := range rels {
+		fmt.Printf("Release (%d):\n", rel.ID)
+		fmt.Printf("  Name: %s\n", rel.Name)
 	}
+	return nil
 }
 
 // FindGroupByName does what it says
@@ -249,7 +247,7 @@ func (d *Handle) MakeBinaries() error {
 			logrus.Errorf("Regex %d compile error: %v", r.ID, err)
 			continue
 		}
-		compiledRegex[r.ID] = &types.RegexpUtil{Regexp: c}
+		compiledRegex[r.ID] = &types.RegexpUtil{Regex: c}
 	}
 	var parts []types.Part
 	var partCount int64

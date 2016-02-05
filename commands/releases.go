@@ -7,7 +7,9 @@ import (
 )
 
 // ReleasesCommand comment
-type ReleasesCommand struct{}
+type ReleasesCommand struct {
+	Limit int
+}
 
 func (r *ReleasesCommand) run(c *kingpin.ParseContext) error {
 	if *debug {
@@ -26,7 +28,12 @@ func (r *ReleasesCommand) list(c *kingpin.ParseContext) error {
 		logrus.SetLevel(logrus.DebugLevel)
 	}
 
+	limit := r.Limit
+	if limit == 0 {
+		limit = 10
+	}
+
 	dbh := db.NewDBHandle(cfg.DB.Name, cfg.DB.Username, cfg.DB.Password, cfg.DB.Verbose)
-	dbh.ListParts()
+	dbh.ListReleases(r.Limit)
 	return nil
 }
