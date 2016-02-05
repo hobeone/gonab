@@ -6,14 +6,6 @@ import (
 	"gopkg.in/alecthomas/kingpin.v2"
 )
 
-func (r *ReleasesCommand) configure(app *kingpin.Application) {
-	rgrp := App.Command("releases", "manipulate releases")
-	rgrp.Command("make", "Create releases from binaries").Action(r.run)
-
-	rgrpList := rgrp.Command("list", "List releases").Action(r.list)
-	rgrpList.Flag("limit", "Number of releases to list").Short('l').Default("10").IntVar(&r.Limit)
-}
-
 var (
 	// App is the main hook to run
 	App        = kingpin.New("gonab", "A usenet indexer")
