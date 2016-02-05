@@ -28,10 +28,10 @@ type newsServer struct {
 	UseTLS   bool
 }
 type dbConfig struct {
-	Path     string
-	Verbose  bool   // turn on verbose db logging
-	UpdateDB bool   // if we should update db items during crawl
-	Type     string // file or memory (for testing)
+	Name     string
+	Username string
+	Password string
+	Verbose  bool // turn on verbose db logging
 }
 
 type regexSource struct {
@@ -44,9 +44,8 @@ func NewConfig() *Config {
 		NewsServer: newsServer{},
 		Regex:      regexSource{},
 		DB: dbConfig{
-			Verbose:  true,
-			UpdateDB: true,
-			Type:     "file",
+			Name:    "gonab",
+			Verbose: false,
 		},
 	}
 }

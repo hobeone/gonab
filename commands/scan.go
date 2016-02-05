@@ -4,7 +4,6 @@ import (
 	"fmt"
 
 	"github.com/Sirupsen/logrus"
-	"github.com/hobeone/gonab/config"
 	"github.com/hobeone/gonab/db"
 	"github.com/hobeone/gonab/nntp"
 	"gopkg.in/alecthomas/kingpin.v2"
@@ -19,14 +18,9 @@ func (s *ScanCommand) scan(c *kingpin.ParseContext) error {
 	if *debug {
 		logrus.SetLevel(logrus.DebugLevel)
 	}
-	logrus.Infof("Reading config %s\n", *configfile)
-	cfg := config.NewConfig()
-	err := cfg.ReadConfig(*configfile)
-	if err != nil {
-		return err
-	}
+	cfg := loadConfig(*configfile)
 
-	dbh := db.NewDBHandle(cfg.DB.Path, cfg.DB.Verbose)
+	dbh := db.NewDBHandle(cfg.DB.Name, cfg.DB.Username, cfg.DB.Password, cfg.DB.Verbose)
 	groups, err := dbh.GetActiveGroups()
 	if err != nil {
 		return err

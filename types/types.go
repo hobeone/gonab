@@ -43,7 +43,7 @@ type Binary struct {
 	Posted     time.Time
 	From       string
 	Xref       string `sql:"size:1024"`
-	Group      string
+	GroupName  string
 	Parts      []Part
 	//Regex
 	//RegexID
@@ -59,7 +59,7 @@ type Part struct {
 	Posted        time.Time
 	From          string
 	Xref          string `sql:"size:1024"`
-	Group         string `sql:"index"`
+	GroupName     string `sql:"index"`
 	Binary        Binary
 	BinaryID      sql.NullInt64
 	Segments      []Segment
@@ -73,28 +73,6 @@ type Segment struct {
 	MessageID string
 	Part      Part
 	PartID    sql.NullInt64
-}
-
-/*
-* CREATE TABLE "collection_regexes" (
-	*   "id" int(10)  NOT NULL ,
-	*     "group_regex" varchar(255) NOT NULL DEFAULT '',
-	*       "regex" varchar(5000) NOT NULL DEFAULT '',
-	*         "status" tinyint(1)  NOT NULL DEFAULT '1',
-	*           "description" varchar(1000) NOT NULL,
-	*             "ordinal" int(11) NOT NULL DEFAULT '0',
-	*               PRIMARY KEY ("id")
-	*               );
-	*
-*/
-
-type CollectionRegex struct {
-	ID          int
-	GroupRegex  string
-	Status      bool
-	Description string
-	Ordinal     int
-	Regex       string
 }
 
 // Regex Comment

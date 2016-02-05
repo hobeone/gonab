@@ -13,8 +13,6 @@ import (
 	"time"
 
 	"github.com/Sirupsen/logrus"
-	"github.com/davecgh/go-spew/spew"
-	"github.com/hobeone/gonab/config"
 	"github.com/hobeone/gonab/db"
 	"github.com/hobeone/gonab/types"
 	"github.com/hobeone/rss2go/httpclient"
@@ -54,8 +52,10 @@ func newzNabRegexToRegex(parsed []string) (*types.Regex, error) {
 	if err != nil {
 		logrus.Errorf("Couldn't parse ordinal %s, skipping", parsed[6])
 	}
-	regex := strings.TrimLeft(parsed[3], "/")
-	regexOpts := regexWithOption.FindStringSubmatch(parsed[3])
+	regex := strings.TrimSpace(parsed[3])
+	regex = strings.Replace(regex, `\\`, `\`, -1)
+	regex = strings.TrimLeft(regex, `/`)
+	regexOpts := regexWithOption.FindStringSubmatch(regex)
 	if regexOpts != nil {
 		if strings.Contains(regexOpts[1], "i") {
 			regex = fmt.Sprintf("(?i)") + regex // add re2 ignore case option
@@ -79,18 +79,24 @@ func newzNabRegexToRegex(parsed []string) (*types.Regex, error) {
 	return &dbregex, nil
 }
 
+var splitRegex = regexp.MustCompile(`\((\d+), \'(.*)\', \'(.*)\', (\d+), (\d+), (.*), (.*)\);$`)
+
 func parseNewzNabRegexes(b []byte) ([]*types.Regex, error) {
 	r := bufio.NewReader(bytes.NewReader(b))
 	newregexes := []*types.Regex{}
+	lines := 0
 	for {
+		lines++
 		record, err := r.ReadString('\n')
+		if lines <= 2 {
+			// Skip the revision and delete line
+			continue
+		}
 		record = strings.TrimSpace(record)
 		if err == io.EOF {
 			break
 		}
-		splitregex := `\((\d+), \'(.*)\', \'(.*)\', (\d+), (\d+), (.*), (.*)\);$`
-		re := regexp.MustCompile(splitregex)
-		matches := re.FindStringSubmatch(record)
+		matches := splitRegex.FindStringSubmatch(record)
 
 		if len(matches) != 8 {
 			logrus.Errorf("Invalid line in regex file: %s", record)
@@ -102,7 +108,6 @@ func parseNewzNabRegexes(b []byte) ([]*types.Regex, error) {
 				continue
 			}
 			newregexes = append(newregexes, newregex)
-			spew.Dump(matches)
 		}
 	}
 	return newregexes, nil
@@ -113,12 +118,8 @@ func (regeximporter *RegexImporter) run(c *kingpin.ParseContext) error {
 		logrus.SetLevel(logrus.DebugLevel)
 	}
 	logrus.Infof("Reading config %s\n", *configfile)
-	cfg := config.NewConfig()
-	err := cfg.ReadConfig(*configfile)
-	if err != nil {
-		return err
-	}
 
+	cfg := loadConfig(*configfile)
 	url := cfg.Regex.URL
 	logrus.Infof("Crawling %v", url)
 
@@ -161,7 +162,7 @@ func (regeximporter *RegexImporter) run(c *kingpin.ParseContext) error {
 		return err
 	}
 
-	dbh := db.NewDBHandle(cfg.DB.Path, cfg.DB.Verbose)
+	dbh := db.NewDBHandle(cfg.DB.Name, cfg.DB.Username, cfg.DB.Password, cfg.DB.Verbose)
 	tx := dbh.DB.Begin()
 	tx.Where("id < ?", 100000).Delete(&types.Regex{})
 	for _, dbregex := range regexes {

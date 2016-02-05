@@ -151,7 +151,7 @@ func Scan(group string, overviews []nntp.MessageOverview) map[string]*types.Part
 					Subject:       newSub,
 					Posted:        o.Date,
 					From:          o.From,
-					Group:         group,
+					GroupName:     group,
 					TotalSegments: segTotal,
 					Segments:      []types.Segment{seg},
 				}

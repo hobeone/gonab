@@ -77,7 +77,7 @@ func WriteNZB(b *types.Binary) (string, error) {
 			Segments: segs,
 			Poster:   part.From,
 			Date:     part.Posted.Unix(),
-			Groups:   []string{part.Group},
+			Groups:   []string{part.GroupName},
 		}
 	}
 

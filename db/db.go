@@ -11,13 +11,12 @@ import (
 
 	"github.com/OneOfOne/xxhash"
 	"github.com/Sirupsen/logrus"
-	"github.com/davecgh/go-spew/spew"
 	"github.com/hobeone/gonab/nzb"
 	"github.com/hobeone/gonab/types"
 	"github.com/jinzhu/gorm"
 
-	// Import sqlite
-	_ "github.com/mattn/go-sqlite3"
+	// Import mysql
+	_ "github.com/go-sql-driver/mysql"
 )
 
 //Handle Struct
@@ -61,34 +60,18 @@ func setupDB(db gorm.DB) error {
 		return err
 	}
 	tx.Commit()
-	err = db.Exec("PRAGMA journal_mode=WAL;").Error
-	if err != nil {
-		return err
-	}
-	err = db.Exec("PRAGMA synchronous = NORMAL;").Error
-	if err != nil {
-		return err
-	}
-	err = db.Exec("PRAGMA encoding = \"UTF-8\";").Error
-	if err != nil {
-		return err
-	}
 
 	return nil
 }
 
-func constructDBPath(dbpath string, memory bool) string {
-	mode := "rwc"
-	if memory {
-		mode = "memory"
-	}
-	return fmt.Sprintf("file:%s?cache=shared&mode=%s", dbpath, mode)
+func constructDBPath(dbname, dbuser, dbpass string) string {
+	return fmt.Sprintf("%s:%s@/%s?charset=utf8&parseTime=True&loc=Local", dbuser, dbpass, dbname)
 }
 
 // CreateAndMigrateDB will create a new database on disk and create all tables.
-func CreateAndMigrateDB(dbpath string, verbose bool) (*Handle, error) {
-	constructedPath := constructDBPath(dbpath, false)
-	db := openDB("sqlite3", constructedPath, verbose)
+func CreateAndMigrateDB(dbname, dbuser, dbpass string, verbose bool) (*Handle, error) {
+	constructedPath := constructDBPath(dbname, dbuser, dbpass)
+	db := openDB("mysql", constructedPath, verbose)
 	err := setupDB(db)
 	if err != nil {
 		return nil, err
@@ -99,9 +82,9 @@ func CreateAndMigrateDB(dbpath string, verbose bool) (*Handle, error) {
 // NewDBHandle creates a new DBHandle
 //	dbpath: the path to the database to use.
 //	verbose: when true database accesses are logged to stdout
-func NewDBHandle(dbpath string, verbose bool) *Handle {
-	constructedPath := constructDBPath(dbpath, false)
-	db := openDB("sqlite3", constructedPath, verbose)
+func NewDBHandle(dbname, dbuser, dbpass string, verbose bool) *Handle {
+	constructedPath := constructDBPath(dbname, dbuser, dbpass)
+	db := openDB("mysql", constructedPath, verbose)
 	return &Handle{DB: db}
 }
 
@@ -111,8 +94,7 @@ func NewDBHandle(dbpath string, verbose bool) *Handle {
 // all the tables as well.
 func NewMemoryDBHandle(verbose bool) *Handle {
 	dbpath := randString()
-	constructedPath := constructDBPath(dbpath, true)
-	db := openDB("sqlite3", constructedPath, verbose)
+	db := openDB("sqlite3", dbpath, verbose)
 	err := setupDB(db)
 	if err != nil {
 		panic(err.Error())
@@ -136,16 +118,18 @@ func (d *Handle) CreatePart(p *types.Part) error {
 
 // ListParts func
 func (d *Handle) ListParts() {
-	var parts []types.Part
-	err := d.DB.Preload("Segments").Find(&parts).Error
+	rows, err := d.DB.Table("part").Select("id, subject, total_segments").Limit(10).Rows()
 	if err != nil {
-		fmt.Printf("Error getting parts: %v\n", err)
+		fmt.Println(err)
+		return
 	}
 
-	for _, p := range parts {
-		fmt.Printf("Part: %s\n", p.Subject)
-		fmt.Printf("  Segments: %d\n", p.TotalSegments)
-		fmt.Printf("  Available Segments: %d\n", len(p.Segments))
+	defer rows.Close()
+	var id, subject, segs string
+	for rows.Next() {
+		rows.Scan(&id, &subject, &segs)
+		fmt.Printf("Part(%s): %s\n", id, subject)
+		fmt.Printf("  Segments: %s\n", segs)
 	}
 }
 
@@ -169,12 +153,14 @@ func (d *Handle) GetActiveGroups() ([]types.Group, error) {
 	return g, nil
 }
 
-// PartRegex Comment
-var PartRegex = regexp.MustCompile(`(?i)[\[\( ]((\d{1,3}\/\d{1,3})|(\d{1,3} of \d{1,3})|(\d{1,3}-\d{1,3})|(\d{1,3}~\d{1,3}))[\)\] ]`)
-
 func hasNameAndParts(m map[string]string) bool {
-	_, nameok := m["name"]
-	_, partok := m["parts"]
+	var nameok, partok bool
+	if _, nameok = m["name"]; nameok {
+		nameok = m["name"] != ""
+	}
+	if _, partok = m["parts"]; partok {
+		partok = m["parts"] != ""
+	}
 	return nameok && partok
 }
 
@@ -184,91 +170,138 @@ func makeBinaryHash(name, group, from, totalParts string) string {
 	return fmt.Sprintf("%x", h.Sum64())
 }
 
+// partRegex is the fallback regex to find parts.
+var partRegex = regexp.MustCompile(`(?i)[\[\( ]((\d{1,3}\/\d{1,3})|(\d{1,3} of \d{1,3})|(\d{1,3}-\d{1,3})|(\d{1,3}~\d{1,3}))[\)\] ]`)
+
+func matchPart(r *types.RegexpUtil, p *types.Part) (map[string]string, error) {
+	m := r.FindStringSubmatchMap(p.Subject)
+	for k, v := range m {
+		m[k] = strings.TrimSpace(v)
+	}
+	// fill name if reqid is available
+	if reqid, ok := m["reqid"]; ok {
+		if _, okname := m["name"]; !okname {
+			m["name"] = reqid
+		}
+	}
+
+	// Generate a name if we don't have one
+	if _, ok := m["name"]; !ok {
+		matchvalues := make([]string, len(m))
+		i := 0
+		for _, v := range m {
+			matchvalues[i] = v
+			i++
+		}
+		m["name"] = strings.Join(matchvalues, " ")
+	}
+
+	// Look for parts manually if the regex didn't return some
+	if _, ok := m["parts"]; !ok {
+		partmatch := partRegex.FindStringSubmatch(p.Subject)
+		if partmatch != nil {
+			m["parts"] = partmatch[1]
+		}
+	}
+	if !hasNameAndParts(m) {
+		return m, fmt.Errorf("Couldn't find Name and Parts for %s\n", p.Subject)
+	}
+
+	// Clean name of '-', '~', ' of '
+	if strings.Index(m["parts"], "/") == -1 {
+		m["parts"] = strings.Replace(m["parts"], "-", "/", -1)
+		m["parts"] = strings.Replace(m["parts"], "~", "/", -1)
+		m["parts"] = strings.Replace(m["parts"], " of ", "/", -1)
+		m["parts"] = strings.Replace(m["parts"], "[", "", -1)
+		m["parts"] = strings.Replace(m["parts"], "]", "", -1)
+		m["parts"] = strings.Replace(m["parts"], "(", "", -1)
+		m["parts"] = strings.Replace(m["parts"], ")", "", -1)
+	}
+
+	if strings.Index(m["parts"], "/") == -1 {
+		return nil, fmt.Errorf("Couldn't find valid parts information for %s (%s didn't include /)\n", p.Subject, m["parts"])
+	}
+	return m, nil
+}
+
 // MakeBinaries comment
 func (d *Handle) MakeBinaries() error {
-	r := `(?i).*?(?P<parts>\d{1,3}\/\d{1,3}).*?\"(?P<name>.*?)\.(sample|mkv|Avi|mp4|vol|ogm|par|rar|sfv|nfo|nzb|srt|ass|mpg|txt|zip|wmv|ssa|r\d{1,3}|7z|tar|mov|divx|m2ts|rmvb|iso|dmg|sub|idx|rm|ac3|t\d{1,2}|u\d{1,3})`
-	rc := types.RegexpUtil{regexp.MustCompile(r)}
-	var parts []types.Part
-	err := d.DB.Where("binary_id is NULL").Find(&parts).Error
+	var partGroups []string
+	err := d.DB.Model(&types.Part{}).Group("group_name").Pluck("group_name", &partGroups).Error
 	if err != nil {
 		return err
 	}
 
+	partGroups = append(partGroups, ".*")
+	var allRegex []types.Regex
+	err = d.DB.Where("group_name in (?)", partGroups).Order("ordinal").Find(&allRegex).Error
+	if err != nil {
+		return err
+	}
+	if len(allRegex) < 1 {
+		return fmt.Errorf("No regexes found, can't process binaries.")
+	}
+
+	compiledRegex := make(map[int]*types.RegexpUtil)
+	for _, r := range allRegex {
+		c, err := regexp.Compile(r.Regex)
+		if err != nil {
+			logrus.Errorf("Regex %d compile error: %v", r.ID, err)
+			continue
+		}
+		compiledRegex[r.ID] = &types.RegexpUtil{Regexp: c}
+	}
+	var parts []types.Part
+	var partCount int64
+	err = d.DB.Where("group_name in (?) AND binary_id is NULL", partGroups).Find(&parts).Count(&partCount).Error
+	if err != nil {
+		return err
+	}
+	logrus.Infof("Found %d parts to process.", partCount)
+
 	binaries := map[string]*types.Binary{}
 
 	for _, p := range parts {
-
-		m := rc.FindStringSubmatchMap(p.Subject)
-		if len(m) > 0 {
-			for k, v := range m {
-				m[k] = strings.TrimSpace(v)
+		matches := make(map[string]string)
+		matched := false
+		for _, r := range allRegex {
+			if !strings.HasPrefix(p.GroupName, r.GroupName) && r.GroupName != ".*" {
+				continue
 			}
-		}
-		// fill name if reqid is available
-		if reqid, ok := m["reqid"]; ok {
-			if _, okname := m["name"]; !okname {
-				m["name"] = reqid
+			matches, err = matchPart(compiledRegex[r.ID], &p)
+			if err != nil {
+				continue
 			}
-		}
+			logrus.Infof("Found match with regex %d (%s): %v", r.ID, r.GroupName, r.Regex)
+			matched = true
+			partcounts := strings.SplitN(matches["parts"], "/", 2)
 
-		// Generate a name if we don't have one
-		if _, ok := m["name"]; !ok {
-			var matchvalues []string
-			for _, v := range m {
-				matchvalues = append(matchvalues, v)
+			binhash := makeBinaryHash(matches["name"], p.GroupName, p.From, partcounts[1])
+			if bin, ok := binaries[binhash]; ok {
+				bin.Parts = append(bin.Parts, p)
+			} else {
+				totalparts, _ := strconv.Atoi(partcounts[1])
+				binaries[binhash] = &types.Binary{
+					Hash:       binhash,
+					Name:       matches["name"],
+					Posted:     p.Posted,
+					From:       p.From,
+					Parts:      []types.Part{p},
+					GroupName:  p.GroupName,
+					TotalParts: totalparts,
+				}
 			}
-			m["name"] = strings.Join(matchvalues, " ")
-		}
 
-		// Look for parts manually if the regex didn't return some
-		if _, ok := m["parts"]; !ok {
-			partmatch := PartRegex.FindStringSubmatch(p.Subject)
-			if partmatch != nil {
-				m["parts"] = partmatch[1]
+			err = d.DB.Save(binaries[binhash]).Error
+			if err != nil {
+				return err
 			}
-		}
-		if !hasNameAndParts(m) {
-			fmt.Printf("Couldn't find Name and Parts for %s\n", p.Subject)
-			spew.Dump(m)
-			continue
-		}
 
-		// Clean name of '-', '~', ' of '
-		if strings.Index(m["parts"], "/") == -1 {
-			m["parts"] = strings.Replace(m["parts"], "-", "/", -1)
-			m["parts"] = strings.Replace(m["parts"], "~", "/", -1)
-			m["parts"] = strings.Replace(m["parts"], " of ", "/", -1)
-			m["parts"] = strings.Replace(m["parts"], "[", "", -1)
-			m["parts"] = strings.Replace(m["parts"], "]", "", -1)
-			m["parts"] = strings.Replace(m["parts"], "(", "", -1)
-			m["parts"] = strings.Replace(m["parts"], ")", "", -1)
+			break
 		}
-
-		if strings.Index(m["parts"], "/") == -1 {
-			fmt.Printf("Couldn't find valid parts information for %s (%s didn't include /)\n", p.Subject, m["parts"])
-			continue
-		}
-
-		partcounts := strings.SplitN(m["parts"], "/", 2)
-
-		binhash := makeBinaryHash(m["name"], p.Group, p.From, partcounts[1])
-		if bin, ok := binaries[binhash]; ok {
-			bin.Parts = append(bin.Parts, p)
-		} else {
-			totalparts, _ := strconv.Atoi(partcounts[1])
-			binaries[binhash] = &types.Binary{
-				Hash:       binhash,
-				Name:       m["name"],
-				Posted:     p.Posted,
-				From:       p.From,
-				Parts:      []types.Part{p},
-				Group:      p.Group,
-				TotalParts: totalparts,
-			}
-		}
-		err = d.DB.Save(binaries[binhash]).Error
-		if err != nil {
-			return err
+		if !matched {
+			logrus.Infof("Couldn't match %s with any regex, deleting.", p.Subject)
+			d.DB.Delete(p)
 		}
 	}
 	return nil
@@ -291,8 +324,8 @@ func cleanReleaseName(name string) string {
 // MakeReleases comment
 func (d *Handle) MakeReleases() error {
 	var binaries []types.Binary
-	q := `SELECT binary.id, binary.name, binary.posted, binary.total_parts, binary.'group'
-	FROM binary
+	q := `SELECT binary.id, binary.name, binary.posted, binary.total_parts, binary.group_name
+	FROM ` + "`binary`" + `
 	INNER JOIN (
 			SELECT
 					part.id, part.binary_id, part.total_segments, count(*) as available_segments
@@ -329,9 +362,9 @@ func (d *Handle) MakeReleases() error {
 
 		// Find size
 		// Blacklist
-		grp, err := d.FindGroupByName(b.Group)
+		grp, err := d.FindGroupByName(b.GroupName)
 		if err != nil {
-			logrus.Errorf("Unknown group %s for binary %d: %s", b.Group, b.ID, b.Name)
+			logrus.Errorf("Unknown group %s for binary %d: %s", b.GroupName, b.ID, b.Name)
 		}
 		nzbstr, err := nzb.WriteNZB(dbbin)
 		if err != nil {
