@@ -1,7 +1,9 @@
 package commands
 
 import (
+	"fmt"
 	"io/ioutil"
+	"path"
 
 	"github.com/Sirupsen/logrus"
 	"github.com/hobeone/gonab/db"
@@ -14,6 +16,7 @@ type ReleasesCommand struct {
 	Limit     int
 	ReleaseID int64
 	FilePath  string
+	DirPath   string
 }
 
 func (r *ReleasesCommand) configure(app *kingpin.Application) {
@@ -25,7 +28,8 @@ func (r *ReleasesCommand) configure(app *kingpin.Application) {
 
 	rgrpExportNZB := rgrp.Command("exportnzb", "Write NZB for release to file").Action(r.exportNZB)
 	rgrpExportNZB.Flag("id", "ID of release to export").Required().Int64Var(&r.ReleaseID)
-	rgrpExportNZB.Flag("file", "Filename to write to").Required().StringVar(&r.FilePath)
+	rgrpExportNZB.Flag("file", "Filename to write to.  If not given use the name of the release +'.nzb'").StringVar(&r.FilePath)
+	rgrpExportNZB.Flag("dir", "Directory to write to.").Default(".").StringVar(&r.DirPath)
 }
 
 func (r *ReleasesCommand) run(c *kingpin.ParseContext) error {
@@ -69,7 +73,14 @@ func (r *ReleasesCommand) exportNZB(c *kingpin.ParseContext) error {
 		return err
 	}
 
-	err = ioutil.WriteFile(rel.Name+".nzb", []byte(rel.NZB), 0644)
+	filename := r.FilePath
+	if filename == "" {
+		filename = rel.Name + ".nzb"
+	}
+	fullpath := path.Join(r.DirPath, filename)
+
+	fmt.Printf("Writing NZB for %s to %s\n", rel.Name, fullpath)
+	err = ioutil.WriteFile(fullpath, []byte(rel.NZB), 0644)
 
 	if err != nil {
 		return err
