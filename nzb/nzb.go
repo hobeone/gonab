@@ -3,6 +3,7 @@ package nzb
 import (
 	"bytes"
 	"encoding/xml"
+	"sort"
 	"strings"
 
 	"github.com/hobeone/gonab/types"
@@ -32,6 +33,13 @@ type File struct {
 	Part     int       `xml:"-"`
 }
 
+// a slice of Files extended to allow sorting
+type fileSlice []File
+
+func (s fileSlice) Len() int           { return len(s) }
+func (s fileSlice) Less(i, j int) bool { return s[i].Subject < s[j].Subject }
+func (s fileSlice) Swap(i, j int)      { s[i], s[j] = s[j], s[i] }
+
 // Segment represents each segment of a file
 type Segment struct {
 	XMLName xml.Name `xml:"segment"`
@@ -39,6 +47,13 @@ type Segment struct {
 	Number  int      `xml:"number,attr"`
 	ID      string   `xml:",innerxml"`
 }
+
+// a slice of Segments extended to allow sorting
+type segmentSlice []Segment
+
+func (s segmentSlice) Len() int           { return len(s) }
+func (s segmentSlice) Less(i, j int) bool { return s[i].Number < s[j].Number }
+func (s segmentSlice) Swap(i, j int)      { s[i], s[j] = s[j], s[i] }
 
 var nzbHeader = `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE nzb PUBLIC "-//newzBin//DTD NZB 1.1//EN" "http://www.newzbin.com/DTD/nzb/nzb-1.1.dtd">
@@ -72,6 +87,7 @@ func WriteNZB(b *types.Binary) (string, error) {
 				ID:     msgid,
 			}
 		}
+		sort.Sort(segmentSlice(segs))
 		nz.Files[i] = File{
 			Subject:  part.Subject,
 			Segments: segs,
@@ -80,6 +96,7 @@ func WriteNZB(b *types.Binary) (string, error) {
 			Groups:   []string{part.GroupName},
 		}
 	}
+	sort.Sort(fileSlice(nz.Files))
 
 	xmlWriter := bytes.NewBufferString("")
 	xmlWriter.WriteString(nzbHeader)
