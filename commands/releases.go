@@ -20,7 +20,7 @@ type ReleasesCommand struct {
 }
 
 func (r *ReleasesCommand) configure(app *kingpin.Application) {
-	rgrp := App.Command("releases", "manipulate releases")
+	rgrp := app.Command("releases", "manipulate releases")
 	rgrp.Command("make", "Create releases from binaries").Action(r.run)
 
 	rgrpList := rgrp.Command("list", "List releases").Action(r.list)

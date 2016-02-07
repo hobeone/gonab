@@ -27,6 +27,7 @@ func (f *FakeNNTPConnection) Overview(begin, end int64) ([]nntp.MessageOverview,
 func TestRegexp(t *testing.T) {
 	RegisterTestingT(t)
 
+	dbh := db.NewMemoryDBHandle(false)
 	s := `[AnimeRG-FTS] Ajin (2016) - 02 [720p] [31FBC4AE] [16/16] - "[AnimeRG-FTS] Ajin (2016) - 02 [720p] [31FBC4AE].mkv.vol63+29.par2" yEnc (27/30)`
 	overview := nntp.MessageOverview{
 		MessageID: "<foobaz12345@foo.bar>",
@@ -39,7 +40,7 @@ func TestRegexp(t *testing.T) {
 	}
 
 	groupName := "misc.test"
-	parts := overviewToParts(groupName, []nntp.MessageOverview{overview})
+	parts := overviewToParts(dbh, groupName, []nntp.MessageOverview{overview})
 
 	Expect(parts).Should(HaveLen(1))
 	Expect(parts).To(HaveKey("a4735742304a441"))
@@ -57,6 +58,34 @@ func TestFindMissingMessages(t *testing.T) {
 	Expect(missed).To(HaveLen(10))
 	Expect(missed.Contains(types.MessageNumber(1))).To(BeTrue())
 	Expect(missed.Contains(types.MessageNumber(10))).To(BeTrue())
+}
+
+func TestGroupScanWithNoNewArticles(t *testing.T) {
+	RegisterTestingT(t)
+	fake := &FakeOverviewCounter{}
+	nc := NewClient(fake)
+
+	groupName := "alt.binaries.multimedia.anime"
+	dbh := db.NewMemoryDBHandle(false)
+	g := types.Group{
+		Name:   groupName,
+		Active: true,
+		Last:   1000,
+		First:  100,
+	}
+	fake.GroupResponse = &nntp.Group{
+		Name:  groupName,
+		High:  1000,
+		Low:   100,
+		Count: 900,
+	}
+
+	dbh.DB.Save(&g)
+
+	err := nc.GroupScanForward(dbh, groupName, 100)
+	Expect(err).To(BeNil())
+
+	Expect(fake.OverviewCalls).To(Equal(0))
 }
 
 func TestGroupScanForward(t *testing.T) {
@@ -135,17 +164,17 @@ func TestGroupForwardScanSteps(t *testing.T) {
 
 	groupName := "alt.binaries.multimedia.anime"
 	dbh := db.NewMemoryDBHandle(false)
+
 	g := types.Group{
 		Name:   groupName,
 		Active: true,
-		Last:   200,
+		Last:   260000000,
 		First:  100,
 	}
 	fake.GroupResponse = &nntp.Group{
-		Name:  groupName,
-		High:  2000,
-		Low:   100,
-		Count: 1900,
+		Name: groupName,
+		High: 262000000,
+		Low:  100,
 	}
 
 	dbh.DB.Save(&g)
@@ -159,7 +188,11 @@ func TestGroupForwardScanSteps(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Error getting group %v", err)
 	}
-	Expect(dbGroup.Last).To(BeEquivalentTo(1200))
+	Expect(dbGroup.Last).To(BeEquivalentTo(260001000))
+	err = nc.GroupScanForward(dbh, groupName, 1000)
+	Expect(err).To(BeNil())
+
+	Expect(fake.OverviewCalls).To(Equal(20))
 }
 
 func BenchmarkHash(b *testing.B) {

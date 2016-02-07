@@ -14,6 +14,11 @@ type ScanCommand struct {
 	MaxArticles int
 }
 
+func (s *ScanCommand) configure(app *kingpin.Application) {
+	cmd := app.Command("scan", "scan for new messages").Action(s.scan)
+	cmd.Flag("limit", "Limit scan to this many messages").Default("10000").IntVar(&s.MaxArticles)
+}
+
 func (s *ScanCommand) scan(c *kingpin.ParseContext) error {
 	if *debug {
 		logrus.SetLevel(logrus.DebugLevel)
@@ -41,7 +46,7 @@ func (s *ScanCommand) scan(c *kingpin.ParseContext) error {
 	}
 
 	for _, g := range groups {
-		err := n.GroupScanForward(dbh, g.Name, 100000)
+		err := n.GroupScanForward(dbh, g.Name, s.MaxArticles)
 		if err != nil {
 			return err
 		}

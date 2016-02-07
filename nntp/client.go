@@ -113,6 +113,9 @@ func (n *NNTPClient) GroupScanForward(dbh *db.Handle, group string, limit int) e
 
 	newMessages := nntpGroup.High - g.Last
 	maxToGet := g.Last + int64(limit)
+	if maxToGet > nntpGroup.High {
+		maxToGet = nntpGroup.High
+	}
 	log.Infof("%d new articles limited to getting just %d. (%d - %d)", newMessages, limit, g.Last, maxToGet)
 	log.Debugf("Max messages per overview = %d", n.MaxScan)
 	begin := g.Last + 1
@@ -140,11 +143,11 @@ func (n *NNTPClient) GroupScanForward(dbh *db.Handle, group string, limit int) e
 	}
 	log.Infof("Got %d messages and %d missed messages", len(o), missedMessages.Cardinality())
 
-	parts := overviewToParts(g.Name, o)
+	parts := overviewToParts(dbh, g.Name, o)
 	tx := dbh.DB.Begin()
 	var txErr error
 	for _, p := range parts {
-		txErr = tx.Create(p).Error
+		txErr = tx.Save(p).Error
 		if txErr != nil {
 			tx.Rollback()
 			return txErr
@@ -193,7 +196,7 @@ func saveMissedMessages(tx *gorm.DB, groupName string, ms types.MessageNumberSet
 
 var segmentRegexp = regexp.MustCompile(`\((\d+)[\/](\d+)\)`)
 
-func overviewToParts(group string, overviews []nntp.MessageOverview) map[string]*types.Part {
+func overviewToParts(dbh *db.Handle, group string, overviews []nntp.MessageOverview) map[string]*types.Part {
 	parts := map[string]*types.Part{}
 
 	for _, o := range overviews {
@@ -212,20 +215,24 @@ func overviewToParts(group string, overviews []nntp.MessageOverview) map[string]
 				Size:      int64(o.Bytes),
 			}
 			if part, ok := parts[hash]; ok {
-				log.Debugf("Adding segment %d to part %s", seg.Segment, newSub)
 				part.Segments = append(part.Segments, seg)
 			} else {
-				// TODO: search DB for the part
-				log.Debugf("New part found: %s", newSub)
-				parts[hash] = &types.Part{
-					Hash:          hash,
-					Subject:       newSub,
-					Posted:        o.Date,
-					From:          o.From,
-					GroupName:     group,
-					TotalSegments: segTotal,
-					Xref:          o.Xref(),
-					Segments:      []types.Segment{seg},
+				part, err := dbh.FindPartByHash(hash)
+				if err != nil {
+					log.Debugf("New part found: %s", newSub)
+					parts[hash] = &types.Part{
+						Hash:          hash,
+						Subject:       newSub,
+						Posted:        o.Date,
+						From:          o.From,
+						GroupName:     group,
+						TotalSegments: segTotal,
+						Xref:          o.Xref(),
+						Segments:      []types.Segment{seg},
+					}
+				} else {
+					dbh.DB.Model(part).Association("Segments").Append(seg)
+					parts[hash] = part
 				}
 			}
 		}

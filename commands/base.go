@@ -19,7 +19,7 @@ func SetupCommands() {
 	rcmd.configure(App)
 
 	scanner := &ScanCommand{}
-	App.Command("scan", "Scan usenet groups for new articles").Action(scanner.scan)
+	scanner.configure(App)
 
 	App.Command("createdb", "Create Database and Tables.").Action(createdb)
 

@@ -171,6 +171,13 @@ func (d *Handle) GetActiveGroups() ([]types.Group, error) {
 	return g, nil
 }
 
+// FindPartByHash does what it says.
+func (d *Handle) FindPartByHash(hash string) (*types.Part, error) {
+	var p types.Part
+	err := d.DB.Where("hash = ?", hash).Find(&p).Error
+	return &p, err
+}
+
 func hasNameAndParts(m map[string]string) bool {
 	var nameok, partok bool
 	if _, nameok = m["name"]; nameok {
