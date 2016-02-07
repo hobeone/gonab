@@ -75,6 +75,15 @@ type Segment struct {
 	PartID    sql.NullInt64
 }
 
+// MissedMessage represents a message we expected to get from the server in an
+// OVERVIEW range but wasn't returned.  Save the message id for retry later.
+type MissedMessage struct {
+	ID            int64
+	MessageNumber int64
+	GroupName     string
+	Attempts      int
+}
+
 // Regex Comment
 type Regex struct {
 	ID          int

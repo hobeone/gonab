@@ -17,6 +17,7 @@ import (
 
 	// Import mysql
 	_ "github.com/go-sql-driver/mysql"
+	_ "github.com/mattn/go-sqlite3"
 )
 
 //Handle Struct
@@ -28,10 +29,20 @@ type Handle struct {
 
 // debugLogger satisfies Gorm's logger interface
 // so that we can log SQL queries at Logrus' debug level
-type debugLogger struct{}
+type debugLogger struct {
+	logger *logrus.Logger
+}
 
-func (*debugLogger) Print(msg ...interface{}) {
-	logrus.Debug(msg)
+func newDBLogger() *debugLogger {
+	d := &debugLogger{
+		logger: logrus.New(),
+	}
+	d.logger.Level = logrus.DebugLevel
+	return d
+}
+
+func (d *debugLogger) Print(msg ...interface{}) {
+	d.logger.Debug(msg)
 }
 
 func openDB(dbType string, dbArgs string, verbose bool) gorm.DB {
@@ -42,7 +53,7 @@ func openDB(dbType string, dbArgs string, verbose bool) gorm.DB {
 		panic(err.Error())
 	}
 	d.SingularTable(true)
-	d.SetLogger(&debugLogger{})
+	d.SetLogger(newDBLogger())
 	d.LogMode(verbose)
 	// Actually test that we have a working connection
 	err = d.DB().Ping()
@@ -54,7 +65,15 @@ func openDB(dbType string, dbArgs string, verbose bool) gorm.DB {
 
 func setupDB(db gorm.DB) error {
 	tx := db.Begin()
-	err := tx.AutoMigrate(&types.Group{}, &types.Release{}, &types.Binary{}, &types.Part{}, &types.Segment{}, &types.Regex{}).Error
+	err := tx.AutoMigrate(
+		&types.Group{},
+		&types.Release{},
+		&types.Binary{},
+		&types.Part{},
+		&types.Segment{},
+		&types.Regex{},
+		&types.MissedMessage{},
+	).Error
 	if err != nil {
 		tx.Rollback()
 		return err
@@ -94,6 +113,7 @@ func NewDBHandle(dbname, dbuser, dbpass string, verbose bool) *Handle {
 // all the tables as well.
 func NewMemoryDBHandle(verbose bool) *Handle {
 	dbpath := randString()
+	dbpath = fmt.Sprintf("file:%s?mode=memory", dbpath)
 	db := openDB("sqlite3", dbpath, verbose)
 	err := setupDB(db)
 	if err != nil {

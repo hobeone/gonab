@@ -41,7 +41,7 @@ func (s *ScanCommand) scan(c *kingpin.ParseContext) error {
 	}
 
 	for _, g := range groups {
-		_, err := n.GroupScanForward(dbh, g.Name, 100000)
+		err := n.GroupScanForward(dbh, g.Name, 100000)
 		if err != nil {
 			return err
 		}
