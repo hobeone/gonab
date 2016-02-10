@@ -2,6 +2,7 @@ package types
 
 import (
 	"database/sql"
+	"regexp"
 	"time"
 )
 
@@ -53,7 +54,7 @@ type Binary struct {
 // Part struct
 type Part struct {
 	ID            int64
-	Hash          string `sql:"index,size:16"`
+	Hash          string `sql:"index;size:16"`
 	Subject       string `sql:"size:512"`
 	TotalSegments int    `sql:"index"`
 	Posted        time.Time
@@ -92,6 +93,17 @@ type Regex struct {
 	Status      bool
 	Ordinal     int
 	GroupName   string
+	Compiled    *RegexpUtil `sql:"-"` // Ignore for DB
+}
+
+// Compile the Regex and stores it in the Compiled attribute.
+func (r *Regex) Compile() error {
+	c, err := regexp.Compile(r.Regex)
+	if err != nil {
+		return err
+	}
+	r.Compiled = &RegexpUtil{Regex: c}
+	return nil
 }
 
 // Size computes size of Binary

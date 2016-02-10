@@ -7,25 +7,27 @@ import (
 	"strings"
 
 	"github.com/OneOfOne/xxhash/native"
-	log "github.com/Sirupsen/logrus"
+	"github.com/Sirupsen/logrus"
 	"github.com/hobeone/gonab/db"
 	"github.com/hobeone/gonab/types"
 	"github.com/hobeone/nntp"
 	"github.com/jinzhu/gorm"
 )
 
-const defaultMaxOverview = 10000
+const defaultMaxOverview = 100000
 
 //NNTPClient comment
 type NNTPClient struct {
-	c       NNTPConnection
-	MaxScan int
+	c          NNTPConnection
+	MaxScan    int
+	SaveMissed bool
 }
 
 //NNTPConnection is for creating fakes in testing
 type NNTPConnection interface {
 	Group(group string) (*nntp.Group, error)
 	Overview(begin, end int64) ([]nntp.MessageOverview, error)
+	Quit() error
 }
 
 // NewClient returns a NNTPClient with the given connection and defaults set.
@@ -38,6 +40,7 @@ func NewClient(c NNTPConnection) *NNTPClient {
 
 //ConnectAndAuthenticate returns a NNTPClient that is authenticated to the
 //server
+//TODO: allow for different SSL configs.
 func ConnectAndAuthenticate(server, username, password string, useSSL bool) (*NNTPClient, error) {
 	var c *nntp.Conn
 	var err error
@@ -57,6 +60,11 @@ func ConnectAndAuthenticate(server, username, password string, useSSL bool) (*NN
 		}
 	}
 	return NewClient(c), nil
+}
+
+// Quit closes the underlying connection.
+func (n *NNTPClient) Quit() {
+	n.c.Quit()
 }
 
 // return a hex string rather than the native uint64 as go's sql module doesn't
@@ -81,43 +89,67 @@ func findMissingMessages(begin, end int64, overviews []nntp.MessageOverview) typ
 	return missed
 }
 
-// GroupScanForward looks for new messages in a particular Group
-func (n *NNTPClient) GroupScanForward(dbh *db.Handle, group string, limit int) error {
+// GroupScanForward looks for new messages in a particular Group.
+// Returns the number of articles scanned and if an error was encountered
+func (n *NNTPClient) GroupScanForward(dbh *db.Handle, group string, limit int) (int, error) {
+	ctxLogger := logrus.WithFields(
+		logrus.Fields{
+			"group": group,
+		},
+	)
 	nntpGroup, err := n.c.Group(group)
 	if err != nil {
-		return err
+		return 0, err
 	}
 	g, err := dbh.FindGroupByName(group)
 	if err != nil {
-		return err
+		return 0, err
 	}
 	if g.First == 0 {
-		log.Infof("DB Group First not set, setting to lowest message in group: %d", nntpGroup.Low)
+		ctxLogger.Infof("DB Group First not set, setting to lowest message in group: %d", nntpGroup.Low)
 		g.First = nntpGroup.Low
 	}
 	if g.Last == 0 {
-		log.Infof("DB Group Last seen not set, setting to most recent message minus max to fetch: %d", nntpGroup.High-int64(limit))
-		g.Last = nntpGroup.High - int64(limit)
+		if limit > 0 {
+			ctxLogger.Infof("DB Group Last seen not set, setting to most recent message minus max to fetch: %d", nntpGroup.High-int64(limit))
+			g.Last = nntpGroup.High - int64(limit)
+		} else {
+			ctxLogger.Infof("DB Group Last seen not set and no limit given, using default of %d", defaultMaxOverview)
+			g.Last = nntpGroup.High - defaultMaxOverview
+			if g.Last < nntpGroup.Low {
+				g.Last = nntpGroup.Low
+			}
+		}
 	}
 	if g.First < nntpGroup.Low {
-		log.Infof("Group %s first article was older than first on server (%d < %d), resetting to %d", g.Name, g.First, nntpGroup.Low, nntpGroup.Low)
+		ctxLogger.Infof("Group %s first article was older than first on server (%d < %d), resetting to %d", g.Name, g.First, nntpGroup.Low, nntpGroup.Low)
 		g.First = nntpGroup.Low
 	}
 	if g.Last > nntpGroup.High {
-		log.Errorf("Group %s last article is newer than on server (%d > %d), resetting to %d.", g.Name, g.Last, nntpGroup.High, nntpGroup.High)
+		ctxLogger.Errorf("Group %s last article is newer than on server (%d > %d), resetting to %d.", g.Name, g.Last, nntpGroup.High, nntpGroup.High)
+		g.Last = nntpGroup.High
 	}
 	err = dbh.DB.Save(g).Error
 	if err != nil {
-		return err
+		return 0, err
 	}
 
 	newMessages := nntpGroup.High - g.Last
-	maxToGet := g.Last + int64(limit)
+	var maxToGet int64
+	if limit > 0 {
+		maxToGet = g.Last + int64(limit)
+	} else {
+		maxToGet = nntpGroup.High
+	}
 	if maxToGet > nntpGroup.High {
 		maxToGet = nntpGroup.High
 	}
-	log.Infof("%d new articles limited to getting just %d. (%d - %d)", newMessages, limit, g.Last, maxToGet)
-	log.Debugf("Max messages per overview = %d", n.MaxScan)
+	if newMessages < 1 {
+		ctxLogger.Info("No new articles")
+		return 0, nil
+	}
+	ctxLogger.Infof("%d new articles limited to getting just %d. (%d - %d)", newMessages, maxToGet-g.Last, g.Last, maxToGet)
+	ctxLogger.Debugf("Max messages per overview = %d", n.MaxScan)
 	begin := g.Last + 1
 	o := []nntp.MessageOverview{}
 	missedMessages := types.NewMessageNumberSet()
@@ -129,20 +161,27 @@ func (n *NNTPClient) GroupScanForward(dbh *db.Handle, group string, limit int) e
 		if toGet < begin {
 			toGet = begin
 		}
-		log.Debugf("Getting %d-%d", begin, toGet)
+		ctxLogger.Debugf("Getting %d-%d", begin, toGet)
 		overviews, err := n.c.Overview(begin, toGet)
 		if err != nil {
-			return err
+			return len(overviews), err
 		}
-		mm := findMissingMessages(begin, toGet, overviews)
-		missedMessages = missedMessages.Union(mm)
-		log.Debugf("Got %d messages and %d missed messages", len(overviews), mm.Cardinality())
+		if n.SaveMissed {
+			mm := findMissingMessages(begin, toGet, overviews)
+			missedMessages = missedMessages.Union(mm)
+			ctxLogger.Debugf("Got %d messages and %d missed messages", len(overviews), mm.Cardinality())
+		} else {
+			ctxLogger.Debugf("Got %d messages", len(overviews))
+		}
 		o = append(o, overviews...)
 		begin = toGet + 1
 		g.Last = toGet
 	}
-	log.Infof("Got %d messages and %d missed messages", len(o), missedMessages.Cardinality())
-
+	if n.SaveMissed {
+		ctxLogger.Infof("Got %d messages and %d missed messages", len(o), missedMessages.Cardinality())
+	} else {
+		ctxLogger.Debugf("Got %d messages", len(o))
+	}
 	parts := overviewToParts(dbh, g.Name, o)
 	tx := dbh.DB.Begin()
 	var txErr error
@@ -150,22 +189,24 @@ func (n *NNTPClient) GroupScanForward(dbh *db.Handle, group string, limit int) e
 		txErr = tx.Save(p).Error
 		if txErr != nil {
 			tx.Rollback()
-			return txErr
+			return len(o), txErr
 		}
 	}
-	txErr = saveMissedMessages(tx, g.Name, missedMessages)
-	if txErr != nil {
-		tx.Rollback()
-		return txErr
+	if n.SaveMissed {
+		txErr = saveMissedMessages(tx, g.Name, missedMessages)
+		if txErr != nil {
+			tx.Rollback()
+			return len(o), txErr
+		}
 	}
 	txErr = tx.Save(&g).Error
 	if txErr != nil {
 		tx.Rollback()
-		return txErr
+		return len(o), txErr
 	}
 	tx.Commit()
 
-	return nil
+	return len(o), nil
 }
 
 func saveMissedMessages(tx *gorm.DB, groupName string, ms types.MessageNumberSet) error {
@@ -219,7 +260,7 @@ func overviewToParts(dbh *db.Handle, group string, overviews []nntp.MessageOverv
 			} else {
 				part, err := dbh.FindPartByHash(hash)
 				if err != nil {
-					log.Debugf("New part found: %s", newSub)
+					logrus.WithField("group", group).Debugf("New part found: %s", newSub)
 					parts[hash] = &types.Part{
 						Hash:          hash,
 						Subject:       newSub,

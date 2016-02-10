@@ -24,6 +24,10 @@ func (f *FakeNNTPConnection) Overview(begin, end int64) ([]nntp.MessageOverview,
 	return f.OverviewResponse, nil
 }
 
+func (f *FakeNNTPConnection) Quit() error {
+	return nil
+}
+
 func TestRegexp(t *testing.T) {
 	RegisterTestingT(t)
 
@@ -82,7 +86,7 @@ func TestGroupScanWithNoNewArticles(t *testing.T) {
 
 	dbh.DB.Save(&g)
 
-	err := nc.GroupScanForward(dbh, groupName, 100)
+	_, err := nc.GroupScanForward(dbh, groupName, 100)
 	Expect(err).To(BeNil())
 
 	Expect(fake.OverviewCalls).To(Equal(0))
@@ -93,6 +97,7 @@ func TestGroupScanForward(t *testing.T) {
 
 	fake := &FakeNNTPConnection{}
 	nc := NewClient(fake)
+	nc.SaveMissed = true
 
 	groupName := "alt.binaries.multimedia.anime"
 	dbh := db.NewMemoryDBHandle(false)
@@ -109,7 +114,7 @@ func TestGroupScanForward(t *testing.T) {
 
 	dbh.DB.Save(&g)
 
-	err := nc.GroupScanForward(dbh, groupName, 100)
+	_, err := nc.GroupScanForward(dbh, groupName, 100)
 	Expect(err).To(BeNil())
 
 	var missedCount int
@@ -132,7 +137,7 @@ func TestGroupScanForward(t *testing.T) {
 	}
 	g.Last = 900
 	dbh.DB.Save(&g)
-	err = nc.GroupScanForward(dbh, groupName, 100)
+	_, err = nc.GroupScanForward(dbh, groupName, 100)
 	Expect(err).To(BeNil())
 
 	dbh.DB.Model(&types.MissedMessage{}).Count(&missedCount)
@@ -179,7 +184,7 @@ func TestGroupForwardScanSteps(t *testing.T) {
 
 	dbh.DB.Save(&g)
 
-	err := nc.GroupScanForward(dbh, groupName, 1000)
+	_, err := nc.GroupScanForward(dbh, groupName, 1000)
 	Expect(err).To(BeNil())
 
 	Expect(fake.OverviewCalls).To(Equal(10))
@@ -189,10 +194,16 @@ func TestGroupForwardScanSteps(t *testing.T) {
 		t.Fatalf("Error getting group %v", err)
 	}
 	Expect(dbGroup.Last).To(BeEquivalentTo(260001000))
-	err = nc.GroupScanForward(dbh, groupName, 1000)
+	_, err = nc.GroupScanForward(dbh, groupName, 1000)
 	Expect(err).To(BeNil())
 
 	Expect(fake.OverviewCalls).To(Equal(20))
+
+	nc.MaxScan = 100000
+	_, err = nc.GroupScanForward(dbh, groupName, -1)
+	Expect(err).To(BeNil())
+
+	Expect(fake.OverviewCalls).To(Equal(40))
 }
 
 func BenchmarkHash(b *testing.B) {
