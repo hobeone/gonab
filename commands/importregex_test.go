@@ -10,6 +10,22 @@ import (
 	. "github.com/onsi/gomega"
 )
 
+func TestNzedbFileParse(t *testing.T) {
+	RegisterTestingT(t)
+	content, err := ioutil.ReadFile("testdata/10-release_naming_regexes.tsv")
+	if err != nil {
+		t.Fatalf("Error parsing: %v", err)
+	}
+	regexes, err := parseNzedbRegexes(content)
+	if err != nil {
+		t.Fatalf("Error parsing: %v", err)
+	}
+	if len(regexes) != 2 {
+		t.Fatalf("Expected 2 regexes, got %d", len(regexes))
+	}
+
+}
+
 func TestNewzNabFileParse(t *testing.T) {
 	RegisterTestingT(t)
 

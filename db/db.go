@@ -156,6 +156,39 @@ func (d *Handle) FindGroupByName(name string) (*types.Group, error) {
 	return &g, nil
 }
 
+// AddGroup adds a new group to the database
+func (d *Handle) AddGroup(groupname string) (*types.Group, error) {
+	group := types.Group{
+		Name:   groupname,
+		Active: true,
+	}
+	err := d.DB.Save(&group).Error
+	if err != nil {
+		return nil, err
+	}
+	return &group, nil
+}
+
+// DisableGroup sets the Active attribute to false.
+func (d *Handle) DisableGroup(groupname string) error {
+	g, err := d.FindGroupByName(groupname)
+	if err != nil {
+		return err
+	}
+	g.Active = false
+	return d.DB.Save(g).Error
+}
+
+// GetAllGroups returns all groups
+func (d *Handle) GetAllGroups() ([]types.Group, error) {
+	var g []types.Group
+	err := d.DB.Find(&g).Error
+	if err != nil {
+		return nil, err
+	}
+	return g, nil
+}
+
 // GetActiveGroups returns all groups marked active in the db
 func (d *Handle) GetActiveGroups() ([]types.Group, error) {
 	var g []types.Group

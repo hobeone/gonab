@@ -12,7 +12,7 @@ type Group struct {
 	Active bool `sql:"index"`
 	First  int64
 	Last   int64
-	Name   string
+	Name   string `sql:"unique"`
 }
 
 //Release struct
@@ -48,7 +48,6 @@ type Binary struct {
 	Parts      []Part
 	//Regex
 	//RegexID
-	//Parts
 }
 
 // Part struct

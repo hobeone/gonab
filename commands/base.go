@@ -3,6 +3,7 @@ package commands
 import (
 	"github.com/Sirupsen/logrus"
 	"github.com/hobeone/gonab/config"
+	"github.com/hobeone/gonab/db"
 	"gopkg.in/alecthomas/kingpin.v2"
 )
 
@@ -18,6 +19,9 @@ func SetupCommands() {
 	rcmd := &ReleasesCommand{}
 	rcmd.configure(App)
 
+	gcmd := &GroupCommand{}
+	gcmd.configure(App)
+
 	scanner := &ScanCommand{}
 	scanner.configure(App)
 
@@ -28,6 +32,17 @@ func SetupCommands() {
 
 	regexcmd := &RegexImporter{}
 	App.Command("importregex", "Import regexes from nzedb").Action(regexcmd.run)
+}
+
+func commonInit() (*config.Config, *db.Handle) {
+	if *debug {
+		logrus.SetLevel(logrus.DebugLevel)
+	}
+	cfg := loadConfig(*configfile)
+
+	dbh := db.NewDBHandle(cfg.DB.Name, cfg.DB.Username, cfg.DB.Password, cfg.DB.Verbose)
+
+	return cfg, dbh
 }
 
 func loadConfig(cfile string) *config.Config {

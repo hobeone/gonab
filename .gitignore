@@ -29,3 +29,6 @@ config.json
 *.db
 *.db-wal
 *.db-shm
+
+# binary
+gonab

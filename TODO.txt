@@ -1,3 +1,2 @@
-Add xref scanning and support
-Add nzb output
-Add unit tests
+Add categorization of releases
+Add blacklists
