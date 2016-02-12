@@ -131,6 +131,8 @@ func TestMakeBinaries(t *testing.T) {
 		t.Fatalf("Error finding expected binary: %v", err)
 	}
 	Expect(bin.TotalParts).To(Equal(2))
+
+	//TODO: make binaries were binary exists and new parts are added.
 }
 
 func loadRegexFixtures(dbh *Handle) error {

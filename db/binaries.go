@@ -5,9 +5,11 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/OneOfOne/xxhash/native"
 	"github.com/Sirupsen/logrus"
+	"github.com/davecgh/go-spew/spew"
 	"github.com/hobeone/gonab/types"
 )
 
@@ -32,6 +34,7 @@ func (d *Handle) getRegexesForGroups(groupNames []string, includeWildCard bool) 
 		goodRegexes = append(goodRegexes, r)
 	}
 
+	logrus.Debugf("got %d regex to use for groups", len(goodRegexes))
 	return goodRegexes, nil
 }
 
@@ -61,7 +64,7 @@ func (d *Handle) MakeBinaries() error {
 	logrus.Infof("Found %d parts to process.", partCount)
 
 	binaries := map[string]*types.Binary{}
-
+	t := time.Now()
 	for _, p := range parts {
 		matched := false
 		for _, r := range regexesToUse {
@@ -72,7 +75,11 @@ func (d *Handle) MakeBinaries() error {
 			if err != nil {
 				continue
 			}
-			logrus.Debugf("Found match with regex %d (%s): %v", r.ID, r.GroupName, r.Regex)
+			logrus.WithFields(logrus.Fields{
+				"subject": p.Subject,
+				"group":   p.GroupName,
+				"regex":   fmt.Sprintf("%d (%s) %v", r.ID, r.GroupName, r.Regex),
+			}).Debugf("Matched part.")
 			matched = true
 			partcounts := strings.SplitN(matches["parts"], "/", 2)
 
@@ -95,9 +102,9 @@ func (d *Handle) MakeBinaries() error {
 					}
 				} else {
 					b.Parts = append(b.Parts, p)
+					binaries[binhash] = b
 				}
 			}
-
 			err = d.DB.Save(binaries[binhash]).Error
 			if err != nil {
 				return err
@@ -110,6 +117,8 @@ func (d *Handle) MakeBinaries() error {
 			d.DB.Delete(p)
 		}
 	}
+	spew.Dump(d.DB.Save(binaries).Error)
+	logrus.Debugf("Processed %d binaries from %d parts in %s", len(binaries), len(parts), time.Since(t))
 	return nil
 }
 
