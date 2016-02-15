@@ -9,7 +9,6 @@ import (
 
 	"github.com/OneOfOne/xxhash/native"
 	"github.com/Sirupsen/logrus"
-	"github.com/davecgh/go-spew/spew"
 	"github.com/hobeone/gonab/types"
 )
 
@@ -117,7 +116,6 @@ func (d *Handle) MakeBinaries() error {
 			d.DB.Delete(p)
 		}
 	}
-	spew.Dump(d.DB.Save(binaries).Error)
 	logrus.Debugf("Processed %d binaries from %d parts in %s", len(binaries), len(parts), time.Since(t))
 	return nil
 }

@@ -15,6 +15,7 @@ var (
 	configfile = App.Flag("config", "Config file to use").Default("config.json").ExistingFile()
 )
 
+// SetupCommands sets up commands
 func SetupCommands() {
 	rcmd := &ReleasesCommand{}
 	rcmd.configure(App)
@@ -24,6 +25,9 @@ func SetupCommands() {
 
 	scanner := &ScanCommand{}
 	scanner.configure(App)
+
+	server := &ServerCommand{}
+	server.configure(App)
 
 	App.Command("createdb", "Create Database and Tables.").Action(createdb)
 

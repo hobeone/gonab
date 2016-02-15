@@ -32,3 +32,6 @@ config.json
 
 # binary
 gonab
+
+# gin autoreloading binary
+gin-bin

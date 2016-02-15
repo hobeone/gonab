@@ -60,6 +60,7 @@ func (d *Handle) MakeReleases() error {
 		if err != nil {
 			return err
 		}
+		logrus.Infof("New release found: %s", b.Name)
 		newrel := &types.Release{
 			Name:         b.Name,
 			OriginalName: b.Name,
