@@ -1,4 +1,11 @@
-{{.Header}}
+package api
+
+import "text/template"
+
+// Templates as varialbes so we don't have to deal with paths.
+// Could move this back out and add a config option though.
+var (
+	searchT = `{{.Header}}
 <rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom" xmlns:newznab="http://www.newznab.com/DTD/2010/feeds/attributes/">
   <channel>
     <atom:link href="{{.URL}}" rel="self" type="application/rss+xml" />
@@ -33,4 +40,6 @@
     </item>
     {{ end }}
   </channel>
-</rss>
+</rss>`
+	searchResponseTemplate = template.Must(template.New("searchresponse").Parse(searchT))
+)

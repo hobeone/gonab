@@ -63,8 +63,9 @@ func TestGetRegexesForGroups(t *testing.T) {
 	RegisterTestingT(t)
 	groups := []string{"misc.test"}
 	dbh := NewMemoryDBHandle(true)
+
 	r := types.Regex{
-		GroupName: `.*`,
+		GroupName: ".*",
 	}
 	dbh.DB.Save(&r)
 
@@ -105,7 +106,7 @@ func TestGetRegexesForGroups(t *testing.T) {
  */
 func TestMakeBinaries(t *testing.T) {
 	RegisterTestingT(t)
-	dbh := NewMemoryDBHandle(false)
+	dbh := NewMemoryDBHandle(true)
 	err := loadFixtures(dbh)
 	if err != nil {
 		t.Fatalf("Error creating fixtures: %v", err)

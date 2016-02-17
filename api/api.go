@@ -2,7 +2,6 @@ package api
 
 import (
 	"fmt"
-	"html/template"
 	"net/http"
 
 	"github.com/Sirupsen/logrus"
@@ -14,8 +13,6 @@ import (
 	"github.com/meatballhat/negroni-logrus"
 	"github.com/rs/cors"
 )
-
-var searchResponseTemplate = template.Must(template.ParseFiles("api/response.tmpl"))
 
 // RunAPIServer sets up and starts a server to provide the NewzNab API
 func RunAPIServer(cfg *config.Config) {

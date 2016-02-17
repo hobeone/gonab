@@ -6,14 +6,22 @@ import (
 	"fmt"
 	"sync"
 
+	"github.com/DATA-DOG/go-txdb"
+	"github.com/DavidHuie/gomigrate"
 	"github.com/Sirupsen/logrus"
 	"github.com/hobeone/gonab/types"
 	"github.com/jinzhu/gorm"
-
 	// Import mysql
 	_ "github.com/go-sql-driver/mysql"
+
+	//Import Sqlite3
 	_ "github.com/mattn/go-sqlite3"
 )
+
+func init() {
+	// we register an sql driver named "txdb"
+	txdb.Register("txdb", "mysql", "gonab@/gonab_test")
+}
 
 //Handle Struct
 type Handle struct {
@@ -58,39 +66,8 @@ func openDB(dbType string, dbArgs string, verbose bool) gorm.DB {
 	return d
 }
 
-func setupDB(db gorm.DB) error {
-	tx := db.Begin()
-	err := tx.AutoMigrate(
-		&types.Group{},
-		&types.Release{},
-		&types.Binary{},
-		&types.Part{},
-		&types.Segment{},
-		&types.Regex{},
-		&types.MissedMessage{},
-	).Error
-	if err != nil {
-		tx.Rollback()
-		return err
-	}
-	tx.Commit()
-
-	return nil
-}
-
 func constructDBPath(dbname, dbuser, dbpass string) string {
 	return fmt.Sprintf("%s:%s@/%s?charset=utf8&parseTime=True&loc=Local", dbuser, dbpass, dbname)
-}
-
-// CreateAndMigrateDB will create a new database on disk and create all tables.
-func CreateAndMigrateDB(dbname, dbuser, dbpass string, verbose bool) (*Handle, error) {
-	constructedPath := constructDBPath(dbname, dbuser, dbpass)
-	db := openDB("mysql", constructedPath, verbose)
-	err := setupDB(db)
-	if err != nil {
-		return nil, err
-	}
-	return &Handle{DB: db}, nil
 }
 
 // NewDBHandle creates a new DBHandle
@@ -110,9 +87,14 @@ func NewMemoryDBHandle(verbose bool) *Handle {
 	dbpath := randString()
 	dbpath = fmt.Sprintf("file:%s?mode=memory", dbpath)
 	db := openDB("sqlite3", dbpath, verbose)
-	err := setupDB(db)
+
+	migrator, err := gomigrate.NewMigrator(db.DB(), gomigrate.Sqlite3{}, "../db/migrations/sqlite3")
 	if err != nil {
-		panic(err.Error())
+		panic(err)
+	}
+	err = migrator.Migrate()
+	if err != nil {
+		panic(err)
 	}
 	return &Handle{DB: db}
 }
