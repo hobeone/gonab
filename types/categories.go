@@ -7,7 +7,8 @@ type Category int
 // has it's own representation.  The INT values here and in the DB IDs must be
 // kept in sync
 const (
-	Other Category = 0
+	Unknown Category = -1
+	Other   Category = 0
 
 	Console Category = 1000
 	Movies  Category = 2000
@@ -39,7 +40,7 @@ const (
 	Movie_Other   Category = 2020
 	Movie_SD      Category = 2030
 	Movie_HD      Category = 2040
-	Movie_Movie3D Category = 2050
+	Movie_3D      Category = 2050
 	Movie_BluRay  Category = 2060
 	Movie_DVD     Category = 2070
 	Movie_WEBDL   Category = 2080
@@ -115,7 +116,7 @@ var categoryMap = map[Category]string{
 	2020: "Movie_Other",
 	2030: "Movie_SD",
 	2040: "Movie_HD",
-	2050: "Movie_Movie3D",
+	2050: "Movie_3D",
 	2060: "Movie_BluRay",
 	2070: "Movie_DVD",
 	2080: "Movie_WEBDL",
