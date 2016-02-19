@@ -11,7 +11,6 @@ import (
 	"github.com/hobeone/gonab/db"
 	"github.com/hobeone/gonab/types"
 	"github.com/hobeone/nntp"
-	"github.com/jinzhu/gorm"
 )
 
 const defaultMaxOverview = 100000
@@ -148,11 +147,10 @@ func (n *NNTPClient) GroupScanForward(dbh *db.Handle, group string, limit int) (
 		ctxLogger.Info("No new articles")
 		return 0, nil
 	}
-	ctxLogger.Infof("%d new articles limited to getting just %d. (%d - %d)", newMessages, maxToGet-g.Last, g.Last, maxToGet)
-	ctxLogger.Debugf("Max messages per overview = %d", n.MaxScan)
+	ctxLogger.Infof("%d new articles limited to getting just %d (%d - %d) in %d article chunks", newMessages, maxToGet-g.Last, g.Last, maxToGet, n.MaxScan)
 	begin := g.Last + 1
-	o := []nntp.MessageOverview{}
-	missedMessages := types.NewMessageNumberSet()
+	totalArticles := 0
+	missedMessages := 0
 	for begin < maxToGet {
 		toGet := begin + int64(n.MaxScan) - 1
 		if toGet > maxToGet {
@@ -166,78 +164,44 @@ func (n *NNTPClient) GroupScanForward(dbh *db.Handle, group string, limit int) (
 		if err != nil {
 			return len(overviews), err
 		}
+		var mm types.MessageNumberSet
 		if n.SaveMissed {
-			mm := findMissingMessages(begin, toGet, overviews)
-			missedMessages = missedMessages.Union(mm)
+			mm = findMissingMessages(begin, toGet, overviews)
+			missedMessages = missedMessages + mm.Cardinality()
 			ctxLogger.Debugf("Got %d messages and %d missed messages", len(overviews), mm.Cardinality())
 		} else {
 			ctxLogger.Debugf("Got %d messages", len(overviews))
 		}
-		o = append(o, overviews...)
+		totalArticles = totalArticles + len(overviews)
+		ctxLogger.Debugf("Saving parts and messages to db.")
+		err = saveOverviewBatch(dbh, g.Name, overviews, mm)
+		if err != nil {
+			return len(overviews), err
+		}
 		begin = toGet + 1
 		g.Last = toGet
+
+		err = dbh.DB.Save(g).Error
+		if err != nil {
+			return 0, err
+		}
 	}
 	if n.SaveMissed {
-		ctxLogger.Infof("Got %d messages and %d missed messages", len(o), missedMessages.Cardinality())
+		ctxLogger.Infof("Got %d messages and %d missed messages", totalArticles, missedMessages)
 	} else {
-		ctxLogger.Debugf("Got %d messages", len(o))
+		ctxLogger.Debugf("Got %d messages", totalArticles)
 	}
-	parts := overviewToParts(dbh, g.Name, o)
-	tx := dbh.DB.Begin()
-	var txErr error
-	for _, p := range parts {
-		txErr = tx.Save(p).Error
-		if txErr != nil {
-			tx.Rollback()
-			return len(o), txErr
-		}
+	err = dbh.DB.Save(g).Error
+	if err != nil {
+		return 0, err
 	}
-	if n.SaveMissed {
-		txErr = saveMissedMessages(tx, g.Name, missedMessages)
-		if txErr != nil {
-			tx.Rollback()
-			return len(o), txErr
-		}
-	}
-	txErr = tx.Save(&g).Error
-	if txErr != nil {
-		tx.Rollback()
-		return len(o), txErr
-	}
-	tx.Commit()
 
-	return len(o), nil
-}
-
-func saveMissedMessages(tx *gorm.DB, groupName string, ms types.MessageNumberSet) error {
-	// Get existing misses in the range for the group
-	// Find previously missed and increment their attempt
-	// Save those
-	// Create new ones0
-
-	for id := range ms.Iter() {
-		var dbMissed types.MissedMessage
-		err := tx.Where("group_name = ? and message_number = ?", groupName, id).First(&dbMissed).Error
-		if err != nil {
-			dbMissed = types.MissedMessage{
-				MessageNumber: int64(id),
-				GroupName:     groupName,
-				Attempts:      1,
-			}
-		} else {
-			dbMissed.Attempts++
-		}
-		err = tx.Save(&dbMissed).Error
-		if err != nil {
-			return err
-		}
-	}
-	return nil
+	return totalArticles, nil
 }
 
 var segmentRegexp = regexp.MustCompile(`\((\d+)[\/](\d+)\)`)
 
-func overviewToParts(dbh *db.Handle, group string, overviews []nntp.MessageOverview) map[string]*types.Part {
+func saveOverviewBatch(dbh *db.Handle, group string, overviews []nntp.MessageOverview, missed types.MessageNumberSet) error {
 	parts := map[string]*types.Part{}
 
 	for _, o := range overviews {
@@ -258,25 +222,29 @@ func overviewToParts(dbh *db.Handle, group string, overviews []nntp.MessageOverv
 			if part, ok := parts[hash]; ok {
 				part.Segments = append(part.Segments, seg)
 			} else {
-				part, err := dbh.FindPartByHash(hash)
-				if err != nil {
-					logrus.WithField("group", group).Debugf("New part found: %s", newSub)
-					parts[hash] = &types.Part{
-						Hash:          hash,
-						Subject:       newSub,
-						Posted:        o.Date,
-						From:          o.From,
-						GroupName:     group,
-						TotalSegments: segTotal,
-						Xref:          o.Xref(),
-						Segments:      []types.Segment{seg},
-					}
-				} else {
-					dbh.DB.Model(part).Association("Segments").Append(seg)
-					parts[hash] = part
+				parts[hash] = &types.Part{
+					Hash:          hash,
+					Subject:       newSub,
+					Posted:        o.Date,
+					From:          o.From,
+					GroupName:     group,
+					TotalSegments: segTotal,
+					Xref:          o.Xref(),
+					Segments:      []types.Segment{seg},
 				}
 			}
 		}
 	}
-	return parts
+	mm := make([]types.MissedMessage, missed.Cardinality())
+	i := 0
+	for id := range missed.Iter() {
+		mm[i] = types.MissedMessage{
+			MessageNumber: int64(id),
+			GroupName:     group,
+			Attempts:      1,
+		}
+		i++
+	}
+	logrus.Debugf("Found %d new parts, %d missed messages", len(parts), len(mm))
+	return dbh.SavePartsAndMissedMessages(parts, mm)
 }

@@ -90,6 +90,8 @@ func parseNewzNabRegexes(b []byte) ([]*types.Regex, error) {
 	r := bufio.NewReader(bytes.NewReader(b))
 	newregexes := []*types.Regex{}
 	lines := 0
+	goodregex := 0
+	badregex := 0
 	for {
 		lines++
 		record, err := r.ReadString('\n')
@@ -106,16 +108,20 @@ func parseNewzNabRegexes(b []byte) ([]*types.Regex, error) {
 
 		if len(matches) != 8 {
 			logrus.Errorf("Invalid line in regex file: %s", record)
+			badregex++
 			continue
 		} else {
 			newregex, err := newzNabRegexToRegex(matches)
 			if err != nil {
 				logrus.Errorf("Couldn't create Regex from %v: %v", record, err)
+				badregex++
 				continue
 			}
 			newregexes = append(newregexes, newregex)
+			goodregex++
 		}
 	}
+	logrus.Infof("Found %d regexs, couldn't parse %d of them.", goodregex+badregex, badregex)
 	return newregexes, nil
 }
 
@@ -246,8 +252,10 @@ func (regeximporter *RegexImporter) run(c *kingpin.ParseContext) error {
 	if err != nil {
 		return err
 	}
+	logrus.Infof("Parsed %d regexes from %s", len(regexes), url)
 
 	dbh := db.NewDBHandle(cfg.DB.Name, cfg.DB.Username, cfg.DB.Password, cfg.DB.Verbose)
+	newcount := 0
 	tx := dbh.DB.Begin()
 	tx.Where("id < ?", 100000).Delete(&types.Regex{})
 	for _, dbregex := range regexes {
@@ -257,7 +265,9 @@ func (regeximporter *RegexImporter) run(c *kingpin.ParseContext) error {
 			tx.Rollback()
 			return err
 		}
+		newcount++
 	}
 	tx.Commit()
+	logrus.Infof("Saved %d regexes.", newcount)
 	return nil
 }

@@ -32,7 +32,7 @@ func SetupCommands() {
 	App.Command("createdb", "Create Database and Tables.").Action(createdb)
 
 	bcmd := &BinariesCommand{}
-	App.Command("makebinaries", "Create binaries from parts").Action(bcmd.run)
+	bcmd.configure(App)
 
 	regexcmd := &RegexImporter{}
 	App.Command("importregex", "Import regexes from nzedb").Action(regexcmd.run)

@@ -43,6 +43,7 @@ inTrigger != 0 { print; next }
 # Skip other comments
 /^\/\*/ { next }
 
+
 # Print all `INSERT` lines. The single quotes are protected by another single quote.
 /INSERT/ {
 	gsub( /\\\047/, "\047\047" )

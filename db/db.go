@@ -4,9 +4,10 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"fmt"
+	"strings"
 	"sync"
+	"time"
 
-	"github.com/DATA-DOG/go-txdb"
 	"github.com/DavidHuie/gomigrate"
 	"github.com/Sirupsen/logrus"
 	"github.com/hobeone/gonab/types"
@@ -17,11 +18,6 @@ import (
 	//Import Sqlite3
 	_ "github.com/mattn/go-sqlite3"
 )
-
-func init() {
-	// we register an sql driver named "txdb"
-	txdb.Register("txdb", "mysql", "gonab@/gonab_test")
-}
 
 //Handle Struct
 type Handle struct {
@@ -84,11 +80,14 @@ func NewDBHandle(dbname, dbuser, dbpass string, verbose bool) *Handle {
 // parallel with their own database.  This will setup the database with the
 // all the tables as well.
 func NewMemoryDBHandle(verbose bool) *Handle {
-	dbpath := randString()
-	dbpath = fmt.Sprintf("file:%s?mode=memory", dbpath)
-	db := openDB("sqlite3", dbpath, verbose)
+	// The DSN is super important here. https://www.sqlite.org/inmemorydb.html
+	// We want a named in memory db with a shared cache so that multiple
+	// connections from the database layer share the cache but each call to this
+	// function will return a different named database so unit tests don't stomp
+	// on each other.
+	gormdb := openDB("sqlite3", fmt.Sprintf("file:%s?mode=memory&cache=shared", randString()), verbose)
 
-	migrator, err := gomigrate.NewMigrator(db.DB(), gomigrate.Sqlite3{}, "../db/migrations/sqlite3")
+	migrator, err := gomigrate.NewMigrator(gormdb.DB(), gomigrate.Sqlite3{}, "../db/migrations/sqlite3")
 	if err != nil {
 		panic(err)
 	}
@@ -96,9 +95,9 @@ func NewMemoryDBHandle(verbose bool) *Handle {
 	if err != nil {
 		panic(err)
 	}
-	return &Handle{DB: db}
-}
 
+	return &Handle{DB: gormdb}
+}
 func randString() string {
 	rb := make([]byte, 32)
 	_, err := rand.Read(rb)
@@ -191,7 +190,7 @@ func (d *Handle) GetActiveGroups() ([]types.Group, error) {
 // FindPartByHash does what it says.
 func (d *Handle) FindPartByHash(hash string) (*types.Part, error) {
 	var p types.Part
-	err := d.DB.Where("hash = ?", hash).Find(&p).Error
+	err := d.DB.Preload("Segments").Where("hash = ?", hash).Find(&p).Error
 	return &p, err
 }
 
@@ -207,4 +206,68 @@ func (d *Handle) FindBinaryByName(name string) (*types.Binary, error) {
 	var b types.Binary
 	err := d.DB.Where("name = ?", name).Find(&b).Error
 	return &b, err
+}
+
+func saveSegments(d *gorm.DB, segments []types.Segment, partid int64) error {
+	var vals []interface{}
+	valstrings := make([]string, len(segments))
+	for i, s := range segments {
+		valstrings[i] = "(?,?,?,?)"
+		vals = append(vals, s.Segment, s.Size, s.MessageID, partid)
+	}
+	stmtString := fmt.Sprintf("INSERT INTO segment (segment, size, message_id, part_id) VALUES%s;", strings.Join(valstrings, ","))
+	return d.Exec(stmtString, vals...).Error
+}
+
+// SavePartsAndMissedMessages saves a list of parts and missing message ids
+// from an Overview call to the news server.
+func (d *Handle) SavePartsAndMissedMessages(parts map[string]*types.Part, missed []types.MissedMessage) error {
+	t := time.Now()
+	tx := d.DB.Begin()
+	newparts, newsegments := 0, 0
+	for hash, part := range parts {
+		var dbpart types.Part
+		err := d.DB.Where("hash = ?", hash).Find(&dbpart).Error
+		if err != nil {
+			// Save new part
+			err = tx.Save(part).Error
+			if err != nil {
+				tx.Rollback()
+				return err
+			}
+			newparts++
+			continue
+		}
+		err = saveSegments(tx, part.Segments, dbpart.ID)
+		if err != nil {
+			tx.Rollback()
+			return err
+		}
+		newsegments = newsegments + len(part.Segments)
+	}
+	logrus.Debugf("Saved %d new parts and %d new messages in %s", newparts, newsegments, time.Since(t))
+
+	t = time.Now()
+	for _, mm := range missed {
+		var dbMissed types.MissedMessage
+		err := tx.Where("group_name = ? and message_number = ?", mm.GroupName, mm.MessageNumber).First(&dbMissed).Error
+		if err != nil {
+			err = tx.Save(&mm).Error
+			if err != nil {
+				tx.Rollback()
+				return err
+			}
+			continue
+		}
+		dbMissed.Attempts++
+		err = tx.Save(&dbMissed).Error
+		if err != nil {
+			tx.Rollback()
+			return err
+		}
+	}
+	logrus.Debugf("Saved %d missed messages in %s", len(missed), time.Since(t))
+	tx.Commit()
+
+	return nil
 }

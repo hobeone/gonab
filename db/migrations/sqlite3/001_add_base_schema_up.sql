@@ -53,6 +53,7 @@ CREATE TABLE "release" (
   "grabs" INTEGER DEFAULT NULL,
   "size" INTEGER DEFAULT NULL,
   "group_id" INTEGER DEFAULT NULL,
+  "category_id" INTEGER DEFAULT NULL,
   "nzb" longtext
 );
 CREATE TABLE "segment" (

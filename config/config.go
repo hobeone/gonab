@@ -26,6 +26,7 @@ type newsServer struct {
 	Username string
 	Password string
 	UseTLS   bool
+	MaxConns int
 }
 type dbConfig struct {
 	Name     string
@@ -42,8 +43,11 @@ type regexSource struct {
 // NewConfig returns a new Config struct with defaults filled out
 func NewConfig() *Config {
 	return &Config{
-		NewsServer: newsServer{},
-		Regex:      regexSource{},
+		NewsServer: newsServer{
+			MaxConns: 1,
+			UseTLS:   true,
+		},
+		Regex: regexSource{},
 		DB: dbConfig{
 			Name:    "gonab",
 			Verbose: false,

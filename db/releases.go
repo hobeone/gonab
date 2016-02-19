@@ -1,9 +1,11 @@
 package db
 
 import (
+	"database/sql"
 	"strings"
 
 	"github.com/Sirupsen/logrus"
+	"github.com/hobeone/gonab/categorize"
 	"github.com/hobeone/gonab/nzb"
 	"github.com/hobeone/gonab/types"
 	"github.com/jinzhu/gorm"
@@ -73,6 +75,8 @@ func (d *Handle) MakeReleases() error {
 		}
 
 		// Categorize
+		cat := categorize.Categorize(newrel.Name, newrel.Group.Name)
+		newrel.CategoryID = sql.NullInt64{Int64: int64(cat), Valid: true}
 
 		// Check if size is too small
 		// Check if too few files

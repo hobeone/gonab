@@ -30,6 +30,8 @@ type Release struct {
 	Size         int64
 	Group        Group
 	GroupID      sql.NullInt64
+	Category     DBCategory `gorm:"column:category"`
+	CategoryID   sql.NullInt64
 	NZB          string `sql:"size:0" gorm:"column:nzb"`
 	// Category
 	// Regex
@@ -48,6 +50,17 @@ type Binary struct {
 	Parts      []Part
 	//Regex
 	//RegexID
+}
+
+// Size computes size of Binary
+func (b *Binary) Size() int64 {
+	size := int64(0)
+	for _, p := range b.Parts {
+		for _, s := range p.Segments {
+			size = size + s.Size
+		}
+	}
+	return size
 }
 
 // Part struct
@@ -105,13 +118,18 @@ func (r *Regex) Compile() error {
 	return nil
 }
 
-// Size computes size of Binary
-func (b *Binary) Size() int64 {
-	size := int64(0)
-	for _, p := range b.Parts {
-		for _, s := range p.Segments {
-			size = size + s.Size
-		}
-	}
-	return size
+// DBCategory maps category information from the DB to a struct.  Information
+// should be mirrored in the Category constants.
+type DBCategory struct {
+	ID             int64
+	Name           string
+	Active         bool
+	Description    string
+	DisablePreview bool
+	MinSize        int
+	ParentID       sql.NullInt64
+}
+
+func (d DBCategory) TableName() string {
+	return "category"
 }

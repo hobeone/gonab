@@ -44,11 +44,17 @@ func TestRegexp(t *testing.T) {
 	}
 
 	groupName := "misc.test"
-	parts := overviewToParts(dbh, groupName, []nntp.MessageOverview{overview})
+	err := saveOverviewBatch(dbh, groupName, []nntp.MessageOverview{overview}, types.MessageNumberSet{})
 
-	Expect(parts).Should(HaveLen(1))
-	Expect(parts).To(HaveKey("a4735742304a441"))
-	part := parts["a4735742304a441"]
+	if err != nil {
+		t.Fatalf("Error: %v", err)
+	}
+
+	part, err := dbh.FindPartByHash("a4735742304a441")
+	if err != nil {
+		t.Fatalf("Error: %v", err)
+	}
+
 	Expect(part.Subject).To(Equal(`[AnimeRG-FTS] Ajin (2016) - 02 [720p] [31FBC4AE] [16/16] - "[AnimeRG-FTS] Ajin (2016) - 02 [720p] [31FBC4AE].mkv.vol63+29.par2" yEnc`))
 	Expect(part.TotalSegments).To(Equal(30))
 	Expect(part.Segments).To(HaveLen(1))
@@ -112,9 +118,12 @@ func TestGroupScanForward(t *testing.T) {
 		Count: 900,
 	}
 
-	dbh.DB.Save(&g)
+	err := dbh.DB.Save(&g).Error
+	if err != nil {
+		t.Fatalf("Error: %v", err)
+	}
 
-	_, err := nc.GroupScanForward(dbh, groupName, 100)
+	_, err = nc.GroupScanForward(dbh, groupName, 100)
 	Expect(err).To(BeNil())
 
 	var missedCount int
@@ -168,7 +177,7 @@ func TestGroupForwardScanSteps(t *testing.T) {
 	nc.MaxScan = 100
 
 	groupName := "alt.binaries.multimedia.anime"
-	dbh := db.NewMemoryDBHandle(false)
+	dbh := db.NewMemoryDBHandle(true)
 
 	g := types.Group{
 		Name:   groupName,

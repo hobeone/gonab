@@ -8,6 +8,10 @@ import (
 
 type BinariesCommand struct{}
 
+func (s *BinariesCommand) configure(app *kingpin.Application) {
+	app.Command("makebinaries", "Create binaries from parts").Action(s.run)
+}
+
 func (s *BinariesCommand) run(c *kingpin.ParseContext) error {
 	if *debug {
 		logrus.SetLevel(logrus.DebugLevel)

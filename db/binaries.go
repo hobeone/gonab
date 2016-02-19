@@ -10,6 +10,7 @@ import (
 	"github.com/OneOfOne/xxhash/native"
 	"github.com/Sirupsen/logrus"
 	"github.com/hobeone/gonab/types"
+	"github.com/jinzhu/gorm"
 )
 
 func (d *Handle) getRegexesForGroups(groupNames []string, includeWildCard bool) ([]types.Regex, error) {
@@ -104,19 +105,57 @@ func (d *Handle) MakeBinaries() error {
 					binaries[binhash] = b
 				}
 			}
-			err = d.DB.Save(binaries[binhash]).Error
-			if err != nil {
-				return err
-			}
-
 			break
 		}
+
 		if !matched {
 			logrus.Infof("Couldn't match %s with any regex, deleting.", p.Subject)
 			d.DB.Delete(p)
 		}
 	}
+	logrus.Infof("Found %d new binaries", len(binaries))
+	dbt := time.Now()
+	tx := d.DB.Begin()
+	for _, b := range binaries {
+		txerr := saveBinary(tx, b)
+		if txerr != nil {
+			tx.Rollback()
+			return txerr
+		}
+	}
+	tx.Commit()
+	logrus.Debugf("Saved %d binaries to db in %s", len(binaries), time.Since(dbt))
 	logrus.Debugf("Processed %d binaries from %d parts in %s", len(binaries), len(parts), time.Since(t))
+	return nil
+}
+
+// SaveBinary will efficently save a binary and it's associated parts.
+// Having to do this for efficency is probably a good sign that I should just
+// use sqlx or something.
+func saveBinary(tx *gorm.DB, b *types.Binary) error {
+	var txerr error
+	if tx.NewRecord(b) {
+		parts := b.Parts
+		b.Parts = []types.Part{}
+		txerr = tx.Save(b).Error
+		if txerr != nil {
+			return txerr
+		}
+		pids := make([]int64, len(parts))
+		for i, p := range b.Parts {
+			pids[i] = p.ID
+		}
+		txerr = tx.Model(types.Part{}).Where("id IN (?)", pids).Updates(map[string]interface{}{"binary_id": b.ID}).Error
+	} else {
+		pids := make([]int64, len(b.Parts))
+		for i, p := range b.Parts {
+			pids[i] = p.ID
+		}
+		txerr = tx.Model(types.Part{}).Where("id IN (?)", pids).Updates(map[string]interface{}{"binary_id": b.ID}).Error
+	}
+	if txerr != nil {
+		return txerr
+	}
 	return nil
 }
 

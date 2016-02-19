@@ -16,13 +16,15 @@ import (
 type ScanCommand struct {
 	MaxArticles int
 	MaxConns    int
+	MaxChunk    int
 	Group       string
 }
 
 func (s *ScanCommand) configure(app *kingpin.Application) {
 	cmd := app.Command("scan", "scan for new messages").Action(s.scan)
-	cmd.Flag("limit", "Limit scan to this man messages starting at the oldest.  -1 means get all new messages.").Default("-1").IntVar(&s.MaxArticles)
-	cmd.Flag("conn", "Limit to this many simultanious connections.").Default("1").IntVar(&s.MaxConns)
+	cmd.Flag("limit", "Limit scan to this many messages starting at the oldest.  -1 means get all new messages.").Default("-1").IntVar(&s.MaxArticles)
+	cmd.Flag("chunk", "Limit scan to this many messages per overview command to the server").Default("10000").IntVar(&s.MaxChunk)
+	cmd.Flag("conn", "Limit to this many simultanious connections.").IntVar(&s.MaxConns)
 	cmd.Flag("group", "Only scan this group.").StringVar(&s.Group)
 }
 
@@ -58,6 +60,7 @@ func (g *GroupScanner) Close() {
 }
 
 func (g *GroupScanner) scanGroup(req *scanRequest) *scanResponse {
+	g.conn.MaxScan = req.MaxChunk
 	articleCount, err := g.conn.GroupScanForward(g.dbh, req.Group, req.Max)
 	return &scanResponse{
 		Group:    req.Group,
@@ -87,6 +90,7 @@ func (g *GroupScanner) ScanLoop(scanRequests chan *scanRequest, wg *sync.WaitGro
 type scanRequest struct {
 	Group        string
 	Max          int
+	MaxChunk     int
 	ResponseChan chan *scanResponse
 }
 
@@ -101,6 +105,13 @@ func (s *ScanCommand) scan(c *kingpin.ParseContext) error {
 		logrus.SetLevel(logrus.DebugLevel)
 	}
 	cfg := loadConfig(*configfile)
+
+	if s.MaxConns < 1 {
+		s.MaxConns = cfg.NewsServer.MaxConns
+	}
+	if s.MaxConns < 1 {
+		s.MaxConns = 1
+	}
 
 	dbh := db.NewDBHandle(cfg.DB.Name, cfg.DB.Username, cfg.DB.Password, cfg.DB.Verbose)
 	var groups []types.Group
@@ -139,7 +150,7 @@ func (s *ScanCommand) scan(c *kingpin.ParseContext) error {
 		if err != nil {
 			return err
 		}
-		fmt.Printf("Started %d scanner\n", i)
+		fmt.Printf("Started scanner %d\n", i)
 		wg.Add(1)
 		go g.ScanLoop(reqchan, &wg)
 	}
@@ -149,6 +160,7 @@ func (s *ScanCommand) scan(c *kingpin.ParseContext) error {
 		reqchan <- &scanRequest{
 			Group:        g.Name,
 			Max:          s.MaxArticles,
+			MaxChunk:     s.MaxChunk,
 			ResponseChan: respchan,
 		}
 	}
@@ -159,6 +171,7 @@ func (s *ScanCommand) scan(c *kingpin.ParseContext) error {
 	for r := range respchan {
 		fmt.Printf("Finished scanning %s\n", r.Group)
 		fmt.Printf("  %d new Messages\n", r.Articles)
+		fmt.Printf("Error: %s\n", r.Error)
 	}
 
 	return nil
