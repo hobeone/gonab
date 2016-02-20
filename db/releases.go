@@ -31,6 +31,7 @@ func (d *Handle) MakeReleases() error {
 	if err != nil {
 		return err
 	}
+	logrus.Infof("Got %d binaries to scan", len(binaries))
 	for _, b := range binaries {
 		// See if a Release already exists for this binary name/date
 		dbrel := &types.Release{}

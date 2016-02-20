@@ -35,3 +35,6 @@ gonab
 
 # gin autoreloading binary
 gin-bin
+
+# pprof files
+*.pprof

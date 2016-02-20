@@ -97,11 +97,11 @@ aInc == 1 && /PRIMARY KEY/ {
 # `KEY` lines are extracted from the `CREATE` block and stored in array for later print 
 # in a separate `CREATE KEY` command. The index name is prefixed by the table name to 
 # avoid a sqlite error for duplicate index name.
-/^(  KEY|\);)/ {
+/^(  KEY|\)(.*)?;)/ {
 	if (prev) print prev
 	prev=""
-	if ($0 == ");"){
-		print
+	if ($0 ~ /;$/){
+    print ");"
 	} else {
 		if ( match( $0, /\"[^"]+/ ) ) indexName = substr( $0, RSTART+1, RLENGTH-1 ) 
 		if ( match( $0, /\([^()]+/ ) ) indexKey = substr( $0, RSTART+1, RLENGTH-1 ) 

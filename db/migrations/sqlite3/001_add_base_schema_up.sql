@@ -63,8 +63,19 @@ CREATE TABLE "segment" (
   "message_id" varchar(255) DEFAULT NULL,
   "part_id" INTEGER DEFAULT NULL
 );
+CREATE INDEX "segment_idx_segment_segment" ON "segment" ("segment");
+CREATE INDEX "segment_idx_segment_part_id" ON "segment" ("part_id");
 CREATE INDEX "group_name" ON "group" ("name");
 CREATE INDEX "group_idx_group_active" ON "group" ("active");
 CREATE INDEX "part_idx_part_hash" ON "part" ("hash");
 CREATE INDEX "part_idx_part_total_segments" ON "part" ("total_segments");
 CREATE INDEX "part_idx_part_group_name" ON "part" ("group_name");
+CREATE INDEX "part_idx_part_binary_id" ON "part" ("binary_id");
+CREATE INDEX "part_idx_part_posted" ON "part" ("posted");
+CREATE INDEX "missed_message_idx_missed_message_group_name" ON "missed_message" ("group_name");
+CREATE INDEX "missed_message_idx_missed_message_message_number" ON "missed_message" ("message_number");
+CREATE INDEX "release_idx_release_group_id" ON "release" ("group_id");
+CREATE INDEX "release_idx_release_category_id" ON "release" ("category_id");
+CREATE INDEX "release_idx_release_search_name" ON "release" ("search_name");
+CREATE INDEX "binary_idx_binary_name" ON "binary" ("name");
+CREATE INDEX "binary_idx_binary_hash" ON "binary" ("hash");

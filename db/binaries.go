@@ -110,7 +110,10 @@ func (d *Handle) MakeBinaries() error {
 
 		if !matched {
 			logrus.Infof("Couldn't match %s with any regex, deleting.", p.Subject)
-			d.DB.Delete(p)
+			err = d.DB.Delete(p).Error
+			if err != nil {
+				return err
+			}
 		}
 	}
 	logrus.Infof("Found %d new binaries", len(binaries))
@@ -124,8 +127,8 @@ func (d *Handle) MakeBinaries() error {
 		}
 	}
 	tx.Commit()
-	logrus.Debugf("Saved %d binaries to db in %s", len(binaries), time.Since(dbt))
-	logrus.Debugf("Processed %d binaries from %d parts in %s", len(binaries), len(parts), time.Since(t))
+	logrus.Infof("Saved %d binaries to db in %s", len(binaries), time.Since(dbt))
+	logrus.Infof("Processed %d binaries from %d parts in %s", len(binaries), len(parts), time.Since(t))
 	return nil
 }
 
