@@ -137,6 +137,7 @@ type DBCategory struct {
 	ParentID       sql.NullInt64
 }
 
+//TableName sets the name of the table to use when querying the db
 func (d DBCategory) TableName() string {
 	return "category"
 }

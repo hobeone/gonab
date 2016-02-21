@@ -18,19 +18,20 @@ import (
 // categories restricts the searched releases to be in those categories
 func (d *Handle) SearchReleases(query string, limit int, categories []types.Category) ([]types.Release, error) {
 	qParts := []string{}
+	var vals []interface{}
 	if query != "" {
 		qParts = append(qParts, "search_name LIKE ?")
+		vals = append(vals, fmt.Sprintf("%%%s%%", query))
 	}
 	if len(categories) > 0 {
 		qParts = append(qParts, "category_id IN (?)")
+		for _, cat := range categories {
+			vals = append(vals, int64(cat))
+		}
 	}
 	q := strings.Join(qParts, " AND ")
 	var releases []types.Release
-	catids := make([]int64, len(categories))
-	for i, cat := range categories {
-		catids[i] = int64(cat)
-	}
-	err := d.DB.Where(q, fmt.Sprintf("%%%s%%", query), catids).Limit(limit).Order("posted desc").Find(&releases).Error
+	err := d.DB.Where(q, vals...).Preload("Group").Limit(limit).Order("posted desc").Find(&releases).Error
 	return releases, err
 }
 

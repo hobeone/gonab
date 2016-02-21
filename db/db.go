@@ -112,26 +112,10 @@ func (d *Handle) CreatePart(p *types.Part) error {
 	return d.DB.Save(p).Error
 }
 
-// SearchReleasesByName searches releases for those matching the given string
 func (d *Handle) SearchReleasesByName(name string) ([]types.Release, error) {
 	var releases []types.Release
-	err := d.DB.Where("search_name LIKE ?", fmt.Sprintf("%%%s%%", name)).Find(&releases).Error
+	err := d.DB.Where("search_name LIKE ?", fmt.Sprintf("%%%s%%", name)).Preload("Group").Find(&releases).Error
 	return releases, err
-}
-
-// ListReleases func
-func (d *Handle) ListReleases(limit int) error {
-	var rels []types.Release
-	err := d.DB.Limit(limit).Find(&rels).Error
-	if err != nil {
-		return err
-	}
-
-	for _, rel := range rels {
-		fmt.Printf("Release (%d):\n", rel.ID)
-		fmt.Printf("  Name: %s\n", rel.Name)
-	}
-	return nil
 }
 
 // FindGroupByName does what it says

@@ -3,7 +3,9 @@ package commands
 import (
 	"fmt"
 	"io/ioutil"
+	"os"
 	"path"
+	"text/tabwriter"
 
 	"github.com/Sirupsen/logrus"
 	"github.com/hobeone/gonab/db"
@@ -66,9 +68,13 @@ func (r *ReleasesCommand) list(c *kingpin.ParseContext) error {
 		return err
 	}
 	fmt.Printf("Found %d releases matching your search criteria\n", len(releases))
+	w := new(tabwriter.Writer)
+	w.Init(os.Stdout, 5, 0, 1, ' ', 0)
+	fmt.Fprintln(w, "Name\tCategory\tDate\tGroup")
 	for _, r := range releases {
-		fmt.Printf("Name: %s - Category: %s\n", r.Name, r.CategoryName())
+		fmt.Fprintln(w, fmt.Sprintf("%s\t%s\t%s\t%s", r.Name, r.CategoryName(), r.Posted, r.Group.Name))
 	}
+	w.Flush()
 	return nil
 }
 
