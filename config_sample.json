@@ -4,15 +4,17 @@
     "Port": 563,
     "Username": "username",
     "Password": "password",
-    "UseTLS": true
+    "UseTLS": true,
+    "MaxConns": 1
   },
   "DB": {
-    "Path": "/path/to/gonab.db",
+    "Name": "gonab",
+    "Username": "gonab",
+    "Password": "gonabpassword",
     "Verbose": true,
-    "UpdateDB": true,
-    "Type": "file"
   },
   "Regex": {
+    "Type": "nnplus",
     "URL": "https://localhost/path/regex?key=xxx"
   }
 }
