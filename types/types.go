@@ -33,8 +33,15 @@ type Release struct {
 	Category     DBCategory `gorm:"column:category"`
 	CategoryID   sql.NullInt64
 	NZB          string `sql:"size:0" gorm:"column:nzb"`
-	// Category
 	// Regex
+}
+
+// CategoryName returns the constant Category of the Release's Category
+func (r *Release) CategoryName() Category {
+	if !r.CategoryID.Valid {
+		return Unknown
+	}
+	return CategoryFromInt(r.CategoryID.Int64)
 }
 
 // Binary struct

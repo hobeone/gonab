@@ -49,10 +49,12 @@ func TestCategoryFromGroup(t *testing.T) {
 var tvMatches = []categoryMatches{
 	{"The.Daily.Show.with.Trevor.Noah.2016.02.08.Gillian.Jacobs.720p.CC.WEBRip.AAC2.0.x264-monkee", "", types.TV_WEBDL},
 	{"The.Daily.Show.with.Trevor.Noah.2016.02.08.Gillian.Jacobs.720p.CC.AAC2.0.x264-monkee", "", types.TV_HD},
+	{"Sleepy.Hollow.S03E11.720p.HDTV.x264-AVS", "", types.TV_HD},
 	{"[HorribleSubs] Haruchika - 07 [1080p]", "", types.TV_Anime},
 	{"NBC.Nightly.News.2016.02.17.WEB-DL.x264-2Maverick", "", types.TV_Other},
 	{"Lilyhammer.3x08.Un.Nuovo.Inizio.ITA.BDMux.x264-NovaRip", "", types.TV_Foreign},
 	{"WWE.NXT.2016.02.17.720p.WEBRip.h264-HatchetGear", "", types.TV_Sport},
+	{"NHL.2016.02.18.Ducks.vs.Canucks.720p.HDTV.x264-PRiNCE", "", types.TV_Sport},
 	{"Solar.System.The.Secrets.of.the.Universe.E01.2014.DOCU.1080p.BluRay.x264-iFPD", "", types.TV_Documentary},
 	{"James.Corden.2016.02.17.Katie.Holmes.HDTV.x264-CROOKS", "", types.TV_SD},
 }

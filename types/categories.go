@@ -164,3 +164,12 @@ func (c Category) String() string {
 	}
 	return "Unknown"
 }
+
+// CategoryFromInt returns a Category corresponding to the given int or Unknown
+// if there isn't one.
+func CategoryFromInt(i int64) Category {
+	if _, ok := categoryMap[Category(i)]; ok {
+		return Category(i)
+	}
+	return Unknown
+}

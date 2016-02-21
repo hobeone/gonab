@@ -189,15 +189,18 @@ func isAnimeTV(name, group string) types.Category {
 }
 
 var (
-	sportTVRegex1 = regexp.MustCompile(`(?i)s\d{1,3}[-._ ]?[ed]\d{1,3}([ex]\d{1,3}|[-.\w ])`)
-	sportTVRegex2 = regexp.MustCompile(`(?i)[-._ ]?(Bellator|bundesliga|EPL|ESPN|FIA|la[-._ ]liga|MMA|motogp|NFL|NCAA|PGA|red[-._ ]bull.+race|Sengoku|Strikeforce|supercup|uefa|UFC|wtcc|WWE)[-._ ]`)
-	sportTVRegex3 = regexp.MustCompile(`(?i)[-._ ]?(AFL|Grand Prix|Indy[-._ ]Car|(iMPACT|Smoky[-._ ]Mountain|Texas)[-._ ]Wrestling|Moto[-._ ]?GP|NSCS[-._ ]ROUND|NECW|Poker|PWX|Rugby|WCW)[-._ ]`)
-	sportTVRegex4 = regexp.MustCompile(`(?i)[-._ ]?(Horse)[-._ ]Racing[-._ ]`)
+	sportTVNegRegex = regexp.MustCompile(`(?i)s\d{1,3}[-._ ]?[ed]\d{1,3}([ex]\d{1,3}|[-.\w ])`)
+	sportTVRegex1   = regexp.MustCompile(`(?i)[-._ ]?(Bellator|bundesliga|EPL|ESPN|FIA|la[-._ ]liga|MMA|motogp|NFL|NHL|NCAA|PGA|red[-._ ]bull.+race|Sengoku|Strikeforce|supercup|uefa|UFC|wtcc|WWE)[-._ ]`)
+	sportTVRegex2   = regexp.MustCompile(`(?i)[-._ ]?(AFL|Grand Prix|Indy[-._ ]Car|(iMPACT|Smoky[-._ ]Mountain|Texas)[-._ ]Wrestling|Moto[-._ ]?GP|NSCS[-._ ]ROUND|NECW|Poker|PWX|Rugby|WCW)[-._ ]`)
+	sportTVRegex3   = regexp.MustCompile(`(?i)[-._ ]?(Horse)[-._ ]Racing[-._ ]`)
 
-	sportRegexes = []*regexp.Regexp{sportTVRegex1, sportTVRegex2, sportTVRegex3, sportTVRegex4}
+	sportRegexes = []*regexp.Regexp{sportTVRegex1, sportTVRegex2, sportTVRegex3}
 )
 
 func isSportTV(name, group string) types.Category {
+	if sportTVNegRegex.MatchString(name) {
+		return types.Unknown
+	}
 	for _, i := range sportRegexes {
 		if i.MatchString(name) {
 			return types.TV_Sport

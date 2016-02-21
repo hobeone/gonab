@@ -17,14 +17,19 @@ type ReleasesCommand struct {
 	ReleaseID int64
 	FilePath  string
 	DirPath   string
+
+	Categories []int64
+	SearchTerm string
 }
 
 func (r *ReleasesCommand) configure(app *kingpin.Application) {
 	rgrp := app.Command("releases", "manipulate releases")
 	rgrp.Command("make", "Create releases from binaries").Action(r.run)
 
-	rgrpList := rgrp.Command("list", "List releases").Action(r.list)
+	rgrpList := rgrp.Command("search", "Search releases").Action(r.list)
 	rgrpList.Flag("limit", "Number of releases to list").Short('l').Default("10").IntVar(&r.Limit)
+	rgrpList.Flag("categories", "Only show releases from this category").Short('c').Int64ListVar(&r.Categories)
+	rgrpList.Flag("search", "Only show releases that match this search term").Short('s').StringVar(&r.SearchTerm)
 
 	rgrpExportNZB := rgrp.Command("exportnzb", "Write NZB for release to file").Action(r.exportNZB)
 	rgrpExportNZB.Flag("id", "ID of release to export").Required().Int64Var(&r.ReleaseID)
@@ -44,18 +49,26 @@ func (r *ReleasesCommand) run(c *kingpin.ParseContext) error {
 }
 
 func (r *ReleasesCommand) list(c *kingpin.ParseContext) error {
-	cfg := loadConfig(*configfile)
-	if *debug {
-		logrus.SetLevel(logrus.DebugLevel)
-	}
+	_, dbh := commonInit()
 
 	limit := r.Limit
 	if limit == 0 {
 		limit = 10
 	}
 
-	dbh := db.NewDBHandle(cfg.DB.Name, cfg.DB.Username, cfg.DB.Password, cfg.DB.Verbose)
-	dbh.ListReleases(r.Limit)
+	var cats []types.Category
+	for _, c := range r.Categories {
+		cats = append(cats, types.CategoryFromInt(c))
+	}
+
+	releases, err := dbh.SearchReleases(r.SearchTerm, r.Limit, cats)
+	if err != nil {
+		return err
+	}
+	fmt.Printf("Found %d releases matching your search criteria\n", len(releases))
+	for _, r := range releases {
+		fmt.Printf("Name: %s - Category: %s\n", r.Name, r.CategoryName())
+	}
 	return nil
 }
 

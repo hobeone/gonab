@@ -78,7 +78,7 @@ func (d *Handle) MakeBinaries() error {
 			logrus.WithFields(logrus.Fields{
 				"subject": p.Subject,
 				"group":   p.GroupName,
-				"regex":   fmt.Sprintf("%d (%s) %v", r.ID, r.GroupName, r.Regex),
+				"regex":   fmt.Sprintf("%d (%s)", r.ID, r.GroupName),
 			}).Debugf("Matched part.")
 			matched = true
 			partcounts := strings.SplitN(matches["parts"], "/", 2)
@@ -149,15 +149,19 @@ func saveBinary(tx *gorm.DB, b *types.Binary) error {
 			pids[i] = p.ID
 		}
 		txerr = tx.Model(types.Part{}).Where("id IN (?)", pids).Updates(map[string]interface{}{"binary_id": b.ID}).Error
+		if txerr != nil {
+			return txerr
+		}
 	} else {
 		pids := make([]int64, len(b.Parts))
 		for i, p := range b.Parts {
 			pids[i] = p.ID
 		}
 		txerr = tx.Model(types.Part{}).Where("id IN (?)", pids).Updates(map[string]interface{}{"binary_id": b.ID}).Error
-	}
-	if txerr != nil {
-		return txerr
+		if txerr != nil {
+			return txerr
+		}
+
 	}
 	return nil
 }

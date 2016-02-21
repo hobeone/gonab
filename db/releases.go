@@ -2,6 +2,7 @@ package db
 
 import (
 	"database/sql"
+	"fmt"
 	"strings"
 
 	"github.com/Sirupsen/logrus"
@@ -11,7 +12,30 @@ import (
 	"github.com/jinzhu/gorm"
 )
 
-// MakeReleases comment
+// SearchReleases does what it says.
+// query is matched against the name of the Releases
+// limit limits the number of returned releases to no more than that
+// categories restricts the searched releases to be in those categories
+func (d *Handle) SearchReleases(query string, limit int, categories []types.Category) ([]types.Release, error) {
+	qParts := []string{}
+	if query != "" {
+		qParts = append(qParts, "search_name LIKE ?")
+	}
+	if len(categories) > 0 {
+		qParts = append(qParts, "category_id IN (?)")
+	}
+	q := strings.Join(qParts, " AND ")
+	var releases []types.Release
+	catids := make([]int64, len(categories))
+	for i, cat := range categories {
+		catids[i] = int64(cat)
+	}
+	err := d.DB.Where(q, fmt.Sprintf("%%%s%%", query), catids).Limit(limit).Order("posted desc").Find(&releases).Error
+	return releases, err
+}
+
+// MakeReleases finds complete binaries and converts them to releases.  This
+// includes categorizing them making the NZB and deleting the binary.
 func (d *Handle) MakeReleases() error {
 	var binaries []types.Binary
 	q := `SELECT binary.id, binary.name, binary.posted, binary.total_parts, binary.group_name
@@ -63,7 +87,6 @@ func (d *Handle) MakeReleases() error {
 		if err != nil {
 			return err
 		}
-		logrus.Infof("New release found: %s", b.Name)
 		newrel := &types.Release{
 			Name:         b.Name,
 			OriginalName: b.Name,
@@ -79,6 +102,7 @@ func (d *Handle) MakeReleases() error {
 		cat := categorize.Categorize(newrel.Name, newrel.Group.Name)
 		newrel.CategoryID = sql.NullInt64{Int64: int64(cat), Valid: true}
 
+		logrus.Infof("New %s release found: %s", cat, b.Name)
 		// Check if size is too small
 		// Check if too few files
 		tx := d.DB.Begin()
