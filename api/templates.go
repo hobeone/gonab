@@ -42,4 +42,28 @@ var (
   </channel>
 </rss>`
 	searchResponseTemplate = template.Must(template.New("searchresponse").Parse(searchT))
+
+	capsT = `<?xml version="1.0" encoding="UTF-8"?>
+<caps>
+  <server version="{{.Server.AppVersion}}" title="{{.Server.Title}}" strapline="{{.Server.Strapline}}" email="{{.Server.Email}}" url="{{.Server.URL}}" image="{{.Server.Image}}"/>
+  <limits max="" default=""/>
+  <retention days=""/>
+  <registration available="{{.Registration.Available}}" open="{{.Registration.Open}}" />
+  <searching>
+	{{- range .Searching}}
+    <{{.Name}} available="{{.Available}}" supportedParams="{{.SupportedParams}}"/>
+	{{- end}}
+  </searching>
+  <categories>
+    {{- range .Categories}}
+    <category id="{{.ID}}" name="{{.Name}}">
+      {{- range .SubCategories}}
+      <subcat id="{{.ID}}" name="{{.Name}}"/>
+      {{- end}}
+    </category>
+    {{- end}}
+  </categories>
+</caps>
+</xml>`
+	capsResponseTemplate = template.Must(template.New("capsresponse").Parse(capsT))
 )

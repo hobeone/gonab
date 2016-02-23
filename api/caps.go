@@ -1,10 +1,12 @@
 package api
 
 import (
+	"fmt"
 	"net/http"
 
 	"gopkg.in/unrolled/render.v1"
 
+	"github.com/hobeone/gonab/types"
 	"github.com/mholt/binding"
 )
 
@@ -18,16 +20,6 @@ func (cr *capsReq) FieldMap(req *http.Request) binding.FieldMap {
 	}
 }
 
-type category struct {
-	ID             int
-	Title          string
-	ParentID       int
-	Status         int
-	Description    string
-	DisablePreview int
-	MinSize        int
-	SubCategories  []category
-}
 type capServer struct {
 	AppVersion string
 	Version    string
@@ -43,21 +35,23 @@ type capLimits struct {
 }
 
 type searchResp struct {
+	Name            string
 	Available       string
 	SupportedParams string
 }
 
 type capsResp struct {
-	Server capServer `json:"server"`
-	Limits capLimits `json:"limits"`
-	//Registration map[string]string     `json:"registration"`
-	//Searching    map[string]searchResp `json:"searching"`
-	Categories []category `json:"categories"`
+	Server       capServer           `json:"server"`
+	Limits       capLimits           `json:"limits"`
+	Registration map[string]string   `json:"registration"`
+	Searching    []searchResp        `json:"searching"`
+	Categories   []*types.DBCategory `json:"categories"`
 }
 
 func capsHandler(rw http.ResponseWriter, r *http.Request) {
 	rend := render.New(render.Options{
 		IndentJSON:   true,
+		IndentXML:    true,
 		UnEscapeHTML: true,
 	})
 	cr := &capsResp{}
@@ -74,38 +68,31 @@ func capsHandler(rw http.ResponseWriter, r *http.Request) {
 		Max:     100,
 		Default: 100,
 	}
-	/*
-		cr.Registration = map[string]string{
-			"available": "yes",
-			"open":      "no",
-		}
-		cr.Searching = map[string]searchResp{
-			"search": {
-				Available:       "yes",
-				SupportedParams: "q",
-			},
-		}
 
-	*/
-	cr.Categories = []category{
+	dbh := getDB(r)
+	cats, err := dbh.GetCategories()
+	if err != nil {
+		rend.Text(rw, http.StatusInternalServerError, fmt.Sprintf("Error: %v", err))
+		return
+	}
+	cr.Categories = cats
+
+	cr.Registration = map[string]string{
+		"Available": "yes",
+		"Open":      "no",
+	}
+	cr.Searching = []searchResp{
 		{
-			ID:             0,
-			Title:          "Other",
-			Status:         1,
-			DisablePreview: 0,
-			MinSize:        0,
-			SubCategories: []category{
-				{
-					ID:             20,
-					Title:          "Hashed",
-					ParentID:       0,
-					Status:         1,
-					Description:    "Hashed",
-					DisablePreview: 0,
-					MinSize:        0,
-				},
-			},
+			Name:            "search",
+			Available:       "yes",
+			SupportedParams: "q",
+		},
+		{
+			Name:            "tv-search",
+			Available:       "yes",
+			SupportedParams: "q,rid,tvdbid,vid,traktid,tvmazeid,imdbid,tmdbid,season,ep",
 		},
 	}
-	rend.XML(rw, http.StatusOK, cr)
+
+	capsResponseTemplate.Execute(rw, cr)
 }

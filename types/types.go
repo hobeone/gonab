@@ -134,10 +134,17 @@ type DBCategory struct {
 	Description    string
 	DisablePreview bool
 	MinSize        int
+	Parent         *DBCategory
 	ParentID       sql.NullInt64
+	SubCategories  []DBCategory `sql:"-"`
 }
 
 //TableName sets the name of the table to use when querying the db
 func (d DBCategory) TableName() string {
 	return "category"
+}
+
+// IsParent returns true if the Category's parent
+func (d *DBCategory) IsParent() bool {
+	return !d.ParentID.Valid
 }
