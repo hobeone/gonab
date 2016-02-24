@@ -11,7 +11,7 @@
     "Name": "gonab",
     "Username": "gonab",
     "Password": "gonabpassword",
-    "Verbose": true,
+    "Verbose": true
   },
   "Regex": {
     "Type": "nnplus",

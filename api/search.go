@@ -2,10 +2,10 @@ package api
 
 import (
 	"fmt"
-	"html/template"
 	"net/http"
 	"time"
 
+	"github.com/hobeone/gonab/types"
 	"github.com/mholt/binding"
 	"gopkg.in/unrolled/render.v1"
 )
@@ -47,12 +47,12 @@ func (s *searchReq) FieldMap(req *http.Request) binding.FieldMap {
 }
 
 type rssImage struct {
-	URL         string `xml:"url"`
-	Title       string `xml:"title"`
-	Link        string `xml:"link"`
-	Description string `xml:"description,omitempty"`
-	Width       int    `xml:"width,omitempty"`
-	Height      int    `xml:"height,omitempty"`
+	URL         string
+	Title       string
+	Link        string
+	Description string
+	Width       int
+	Height      int
 }
 
 type searchResponse struct {
@@ -60,14 +60,13 @@ type searchResponse struct {
 	ContactEmail string
 	Offset       int
 	Total        int
-	Header       template.HTML
 	Category     string
 	Image        *rssImage
-	NZBs         []rawNZB
+	NZBs         []NZB
 }
 
-// rawNZB represents a single NZB item in search results.
-type rawNZB struct {
+// NZB represents a single NZB item in search results.
+type NZB struct {
 	Title       string
 	Link        string
 	Size        int64
@@ -82,15 +81,14 @@ type rawNZB struct {
 
 const maxSearchResults = 100
 
-// https://newznab.readthedocs.org/en/latest/misc/api/#search
 func searchHandler(rw http.ResponseWriter, r *http.Request) {
+	rend := render.New()
 	searchrequest := new(searchReq)
 	errs := binding.Bind(r, searchrequest)
-	// Better error handling
-	if errs.Handle(rw) {
+	if errs.Len() > 0 {
+		handleBindingErrors(rw, errs)
 		return
 	}
-	rend := render.New()
 
 	dbh := getDB(r)
 	releases, err := dbh.SearchReleasesByName(searchrequest.Query)
@@ -104,7 +102,6 @@ func searchHandler(rw http.ResponseWriter, r *http.Request) {
 		ContactEmail: "foo@bar.com",
 		Offset:       searchrequest.Offset,
 		Total:        len(releases),
-		Header:       template.HTML(`<?xml version="1.0" encoding="utf-8" ?>`),
 		Image: &rssImage{
 			URL:         "http://localhost/foo.jpg",
 			Title:       "gonab",
@@ -112,20 +109,24 @@ func searchHandler(rw http.ResponseWriter, r *http.Request) {
 			Description: "visit gonab",
 		},
 	}
-	sr.NZBs = make([]rawNZB, len(releases))
+	sr.NZBs = make([]NZB, len(releases))
 	for i, rel := range releases {
-		sr.NZBs[i] = rawNZB{
+		sr.NZBs[i] = NZB{
 			Title:       rel.Name,
-			Link:        "https://www.packetspike.net:81/getnzb/1487ae6e44de505ffe43bae63269d2c693142ce0.nzb&i=1&r=d46718373be42282260a342878962f35",
+			Link:        makeNZBUrl(rel),
 			Size:        rel.Size,
-			Category:    "TV > HD",
+			Category:    rel.Category.Name,
 			Description: rel.Name,
 			GUID:        rel.Hash,
 			PermaLink:   true,
-			Comments:    "http://localhost/details/nzbhash22222222222222222222222222222222222222222222222222222#comments",
+			Comments:    fmt.Sprintf("https://localhost/nzb/details/%s#comments", rel.Hash),
 			Date:        rel.Posted,
 		}
 	}
 
 	searchResponseTemplate.Execute(rw, sr)
+}
+
+func makeNZBUrl(rel types.Release) string {
+	return fmt.Sprintf("https://localhost/getnzb/%s", rel.Hash)
 }

@@ -2,7 +2,6 @@ package api
 
 import (
 	"fmt"
-	"html/template"
 	"net/http"
 
 	"gopkg.in/unrolled/render.v1"
@@ -46,7 +45,6 @@ func tvSearchHandler(rw http.ResponseWriter, r *http.Request) {
 		ContactEmail: "foo@bar.com",
 		Offset:       searchrequest.Offset,
 		Total:        len(releases),
-		Header:       template.HTML(`<?xml version="1.0" encoding="utf-8" ?>`),
 		Image: &rssImage{
 			URL:         "http://localhost/foo.jpg",
 			Title:       "gonab tvsearch",
@@ -54,9 +52,9 @@ func tvSearchHandler(rw http.ResponseWriter, r *http.Request) {
 			Description: "visit gonab",
 		},
 	}
-	sr.NZBs = make([]rawNZB, len(releases))
+	sr.NZBs = make([]NZB, len(releases))
 	for i, rel := range releases {
-		sr.NZBs[i] = rawNZB{
+		sr.NZBs[i] = NZB{
 			Title:       rel.Name,
 			Link:        "https://www.packetspike.net:81/getnzb/1487ae6e44de505ffe43bae63269d2c693142ce0.nzb&i=1&r=d46718373be42282260a342878962f35",
 			Size:        rel.Size,

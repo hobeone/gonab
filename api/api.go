@@ -30,6 +30,7 @@ func configRoutes(dbh *db.Handle) *negroni.Negroni {
 	r.HandleFunc("/api", capsHandler).Queries("t", "caps")
 	r.HandleFunc("/api", searchHandler).Queries("t", "search")
 	r.HandleFunc("/api", tvSearchHandler).Queries("t", "tvsearch")
+	r.HandleFunc("/getnzb", nzbDownloadHandler)
 	r.HandleFunc("/", homeHandler)
 	n := negroni.Classic()
 	c := cors.New(cors.Options{
@@ -54,7 +55,6 @@ func getDB(r *http.Request) *db.Handle {
 
 func dbMiddleware(dbh *db.Handle) negroni.Handler {
 	return negroni.HandlerFunc(func(rw http.ResponseWriter, r *http.Request, next http.HandlerFunc) {
-		fmt.Println("Adding db")
 		context.Set(r, "db", dbh)
 		next(rw, r)
 	})

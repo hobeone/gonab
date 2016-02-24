@@ -2,10 +2,10 @@ package api
 
 import "text/template"
 
-// Templates as varialbes so we don't have to deal with paths.
+// Templates as variables so we don't have to deal with paths.
 // Could move this back out and add a config option though.
 var (
-	searchT = `{{.Header}}
+	searchT = `<?xml version="1.0" encoding="UTF-8"?>
 <rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom" xmlns:newznab="http://www.newznab.com/DTD/2010/feeds/attributes/">
   <channel>
     <atom:link href="{{.URL}}" rel="self" type="application/rss+xml" />
@@ -19,7 +19,7 @@ var (
       <url>{{.Image.URL}}</url>
       <title>{{.Image.Title}}</title>
       <link>{{.Image.Link}}</link>
-      <description>Visit NZBs(dot)ORG - Home of the NZB Harvester</description>
+      <description>Go Based NZB Harvester</description>
     </image>
     <newznab:response offset="{{.Offset}}" total="{{.Total}}" />
     {{ range .NZBs}}
@@ -38,7 +38,7 @@ var (
       <newznab:attr name="category" value="5040" />
       <newznab:attr name="size" value="{{.Size}}" />
     </item>
-    {{ end }}
+    {{- end }}
   </channel>
 </rss>`
 	searchResponseTemplate = template.Must(template.New("searchresponse").Parse(searchT))

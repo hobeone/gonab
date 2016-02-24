@@ -1,6 +1,7 @@
 package db
 
 import (
+	"crypto/sha1"
 	"fmt"
 	"regexp"
 	"strconv"
@@ -83,7 +84,7 @@ func (d *Handle) MakeBinaries() error {
 			matched = true
 			partcounts := strings.SplitN(matches["parts"], "/", 2)
 
-			binhash := makeBinaryHash(matches["name"], p.GroupName, p.From, partcounts[1])
+			binhash := makeHash(matches["name"], p.GroupName, p.From, partcounts[1])
 			if bin, ok := binaries[binhash]; ok {
 				bin.Parts = append(bin.Parts, p)
 			} else {
@@ -166,9 +167,13 @@ func saveBinary(tx *gorm.DB, b *types.Binary) error {
 	return nil
 }
 
-func makeBinaryHash(name, group, from, totalParts string) string {
+func makeShaHash(hashargs ...string) string {
+	return fmt.Sprintf("%x", sha1.Sum([]byte(strings.Join(hashargs, ""))))
+}
+
+func makeHash(hashargs ...string) string {
 	h := xxhash.New64()
-	h.Write([]byte(name + group + from + totalParts))
+	h.Write([]byte(strings.Join(hashargs, ".")))
 	return fmt.Sprintf("%x", h.Sum64())
 }
 

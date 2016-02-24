@@ -3,6 +3,7 @@ package db
 import (
 	"database/sql"
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/Sirupsen/logrus"
@@ -33,6 +34,13 @@ func (d *Handle) SearchReleases(query string, limit int, categories []types.Cate
 	var releases []types.Release
 	err := d.DB.Where(q, vals...).Preload("Group").Limit(limit).Order("posted desc").Find(&releases).Error
 	return releases, err
+}
+
+//FindReleaseByHash returns
+func (d *Handle) FindReleaseByHash(h string) (*types.Release, error) {
+	var rel types.Release
+	err := d.DB.Where("hash = ?", h).First(&rel).Error
+	return &rel, err
 }
 
 // MakeReleases finds complete binaries and converts them to releases.  This
@@ -97,6 +105,7 @@ func (d *Handle) MakeReleases() error {
 			Group:        *grp,
 			Size:         dbbin.Size(),
 			NZB:          nzbstr,
+			Hash:         makeShaHash(b.Name, grp.Name, strconv.FormatInt(b.Posted.Unix(), 10)),
 		}
 
 		// Categorize

@@ -70,9 +70,9 @@ func (r *ReleasesCommand) list(c *kingpin.ParseContext) error {
 	fmt.Printf("Found %d releases matching your search criteria\n", len(releases))
 	w := new(tabwriter.Writer)
 	w.Init(os.Stdout, 5, 0, 1, ' ', 0)
-	fmt.Fprintln(w, "Name\tCategory\tDate\tGroup")
+	fmt.Fprintln(w, "Name\tCategory\tDate\tGroup\tHash")
 	for _, r := range releases {
-		fmt.Fprintln(w, fmt.Sprintf("%s\t%s\t%s\t%s", r.Name, r.CategoryName(), r.Posted, r.Group.Name))
+		fmt.Fprintln(w, fmt.Sprintf("%s\t%s\t%s\t%s\t%s", r.Name, r.CategoryName(), r.Posted, r.Group.Name, r.Hash))
 	}
 	w.Flush()
 	return nil
