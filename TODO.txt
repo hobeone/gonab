@@ -1,2 +1,4 @@
-Add categorization of releases
 Add blacklists
+Test with nzedb regex support
+Add skipping of .nzb files?
+Add min size for groups

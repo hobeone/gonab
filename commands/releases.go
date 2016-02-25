@@ -63,7 +63,7 @@ func (r *ReleasesCommand) list(c *kingpin.ParseContext) error {
 		cats = append(cats, types.CategoryFromInt(c))
 	}
 
-	releases, err := dbh.SearchReleases(r.SearchTerm, r.Limit, cats)
+	releases, err := dbh.SearchReleases(r.SearchTerm, 0, r.Limit, cats)
 	if err != nil {
 		return err
 	}

@@ -114,7 +114,7 @@ func (d *Handle) CreatePart(p *types.Part) error {
 
 func (d *Handle) SearchReleasesByName(name string) ([]types.Release, error) {
 	var releases []types.Release
-	err := d.DB.Where("search_name LIKE ?", fmt.Sprintf("%%%s%%", name)).Preload("Group").Find(&releases).Error
+	err := d.DB.Where("search_name LIKE ?", fmt.Sprintf("%%%s%%", name)).Preload("Category").Preload("Group").Find(&releases).Error
 	return releases, err
 }
 

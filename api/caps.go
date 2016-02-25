@@ -1,7 +1,9 @@
 package api
 
 import (
+	"bytes"
 	"fmt"
+	"html/template"
 	"net/http"
 
 	"gopkg.in/unrolled/render.v1"
@@ -41,6 +43,7 @@ type searchResp struct {
 }
 
 type capsResp struct {
+	Header       template.HTML       `json:"-"`
 	Server       capServer           `json:"server"`
 	Limits       capLimits           `json:"limits"`
 	Registration map[string]string   `json:"registration"`
@@ -54,7 +57,17 @@ func capsHandler(rw http.ResponseWriter, r *http.Request) {
 		IndentXML:    true,
 		UnEscapeHTML: true,
 	})
-	cr := &capsResp{}
+
+	capsreq := &capsReq{}
+	errs := binding.Bind(r, capsreq)
+	if errs.Len() > 0 {
+		handleBindingErrors(rw, errs)
+		return
+	}
+
+	cr := &capsResp{
+		Header: template.HTML(`<?xml version="1.0" encoding="UTF-8"?>`),
+	}
 	cr.Server = capServer{
 		AppVersion: "0.0.1",
 		Version:    "0.1",
@@ -93,6 +106,11 @@ func capsHandler(rw http.ResponseWriter, r *http.Request) {
 			SupportedParams: "q,rid,tvdbid,vid,traktid,tvmazeid,imdbid,tmdbid,season,ep",
 		},
 	}
-
-	capsResponseTemplate.Execute(rw, cr)
+	b := bytes.NewBuffer([]byte{})
+	capsResponseTemplate.Execute(b, cr)
+	if capsreq.Output == "json" {
+		rend.JSON(rw, http.StatusOK, cr)
+	} else {
+		rend.Text(rw, http.StatusOK, b.String())
+	}
 }

@@ -128,15 +128,15 @@ func (r *Regex) Compile() error {
 // DBCategory maps category information from the DB to a struct.  Information
 // should be mirrored in the Category constants.
 type DBCategory struct {
-	ID             int64
-	Name           string
-	Active         bool
-	Description    string
-	DisablePreview bool
-	MinSize        int
-	Parent         *DBCategory
-	ParentID       sql.NullInt64
-	SubCategories  []DBCategory `sql:"-"`
+	ID             int64         `json:"id"`
+	Name           string        `json:"name"`
+	Active         bool          `json:"-"`
+	Description    string        `json:"-"`
+	DisablePreview bool          `json:"-"`
+	MinSize        int           `json:"-"`
+	Parent         *DBCategory   `json:"-"`
+	ParentID       sql.NullInt64 `json:"-"`
+	SubCategories  []DBCategory  `sql:"-" json:"subcat"`
 }
 
 //TableName sets the name of the table to use when querying the db

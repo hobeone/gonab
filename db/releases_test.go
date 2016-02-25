@@ -21,7 +21,7 @@ func TestSearchReleases(t *testing.T) {
 		t.Fatalf("Error creating release: %s", err)
 	}
 
-	dbrel, err := dbh.SearchReleases("foo", 10, []types.Category{types.TV_HD, types.TV_SD})
+	dbrel, err := dbh.SearchReleases("foo", 0, 10, []types.Category{types.TV_HD, types.TV_SD})
 	if err != nil {
 		t.Fatalf("Error searching for release: %s", err)
 	}

@@ -17,7 +17,7 @@ import (
 // query is matched against the name of the Releases
 // limit limits the number of returned releases to no more than that
 // categories restricts the searched releases to be in those categories
-func (d *Handle) SearchReleases(query string, limit int, categories []types.Category) ([]types.Release, error) {
+func (d *Handle) SearchReleases(query string, offset, limit int, categories []types.Category) ([]types.Release, error) {
 	qParts := []string{}
 	var vals []interface{}
 	if query != "" {
@@ -32,7 +32,7 @@ func (d *Handle) SearchReleases(query string, limit int, categories []types.Cate
 	}
 	q := strings.Join(qParts, " AND ")
 	var releases []types.Release
-	err := d.DB.Where(q, vals...).Preload("Group").Limit(limit).Order("posted desc").Find(&releases).Error
+	err := d.DB.Where(q, vals...).Preload("Category").Preload("Group").Offset(offset).Limit(limit).Order("posted desc").Find(&releases).Error
 	return releases, err
 }
 

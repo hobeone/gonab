@@ -2,6 +2,7 @@ package api
 
 import (
 	"fmt"
+	"html/template"
 	"net/http"
 	"time"
 
@@ -15,7 +16,7 @@ type searchReq struct {
 	Query      string
 	Groups     string
 	Limit      int
-	Categories string
+	Categories []int64
 	Output     string
 	Attrs      string
 	Extended   bool
@@ -63,6 +64,7 @@ type searchResponse struct {
 	Category     string
 	Image        *rssImage
 	NZBs         []NZB
+	Header       template.HTML
 }
 
 // NZB represents a single NZB item in search results.
@@ -77,6 +79,7 @@ type NZB struct {
 	Description string
 	Author      string
 	Date        time.Time
+	Group       string
 }
 
 const maxSearchResults = 100
@@ -91,13 +94,19 @@ func searchHandler(rw http.ResponseWriter, r *http.Request) {
 	}
 
 	dbh := getDB(r)
-	releases, err := dbh.SearchReleasesByName(searchrequest.Query)
+	var cats []types.Category
+	for _, c := range searchrequest.Categories {
+		cats = append(cats, types.CategoryFromInt(c))
+	}
+
+	releases, err := dbh.SearchReleases(searchrequest.Query, searchrequest.Offset, searchrequest.Limit, cats)
 	if err != nil {
 		rend.Text(rw, http.StatusInternalServerError, fmt.Sprintf("Error: %v", err))
 		return
 	}
 
 	sr := &searchResponse{
+		Header:       template.HTML(`<?xml version="1.0" encoding="UTF-8"?>`),
 		URL:          r.RequestURI,
 		ContactEmail: "foo@bar.com",
 		Offset:       searchrequest.Offset,
@@ -121,6 +130,7 @@ func searchHandler(rw http.ResponseWriter, r *http.Request) {
 			PermaLink:   true,
 			Comments:    fmt.Sprintf("https://localhost/nzb/details/%s#comments", rel.Hash),
 			Date:        rel.Posted,
+			Group:       rel.Group.Name,
 		}
 	}
 

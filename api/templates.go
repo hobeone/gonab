@@ -1,14 +1,13 @@
 package api
 
-import "text/template"
+import "html/template"
 
 // Templates as variables so we don't have to deal with paths.
 // Could move this back out and add a config option though.
 var (
-	searchT = `<?xml version="1.0" encoding="UTF-8"?>
+	searchT = `{{.Header}}
 <rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom" xmlns:newznab="http://www.newznab.com/DTD/2010/feeds/attributes/">
   <channel>
-    <atom:link href="{{.URL}}" rel="self" type="application/rss+xml" />
     <title>gonab API Search</title>
     <description>gonab Feed</description>
     <link>https://github.org/hobeone/gonab</link>
@@ -31,6 +30,8 @@ var (
       <pubDate>{{.Date}}</pubDate> 
       <category>{{.Category}}</category>  
       <description>{{.Title}}</description>
+			<size>{{.Size}}</size>
+			<group>{{.Group}}</group>
       <enclosure url="{{.Link}}" length="{{.Size}}" type="application/x-nzb" />
       <newznab:attr name="guid" value="{{.GUID}}" />
       <newznab:attr name="details" value="" />
@@ -43,7 +44,7 @@ var (
 </rss>`
 	searchResponseTemplate = template.Must(template.New("searchresponse").Parse(searchT))
 
-	capsT = `<?xml version="1.0" encoding="UTF-8"?>
+	capsT = `{{.Header}}
 <caps>
   <server version="{{.Server.AppVersion}}" title="{{.Server.Title}}" strapline="{{.Server.Strapline}}" email="{{.Server.Email}}" url="{{.Server.URL}}" image="{{.Server.Image}}"/>
   <limits max="" default=""/>

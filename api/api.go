@@ -14,6 +14,7 @@ import (
 	"github.com/hobeone/gonab/config"
 	"github.com/hobeone/gonab/db"
 	"github.com/meatballhat/negroni-logrus"
+	"github.com/phyber/negroni-gzip/gzip"
 	"github.com/rs/cors"
 )
 
@@ -33,10 +34,10 @@ func configRoutes(dbh *db.Handle) *negroni.Negroni {
 	r.HandleFunc("/getnzb", nzbDownloadHandler)
 	r.HandleFunc("/", homeHandler)
 	n := negroni.Classic()
+	n.Use(gzip.Gzip(gzip.DefaultCompression))
 	c := cors.New(cors.Options{
 		AllowedOrigins: []string{"*"},
-	},
-	)
+	})
 
 	n.Use(negronilogrus.NewCustomMiddleware(logrus.DebugLevel, &logrus.JSONFormatter{}, "web"))
 	n.Use(c)
