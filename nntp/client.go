@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"regexp"
 	"strconv"
-	"strings"
 
 	"github.com/OneOfOne/xxhash/native"
 	"github.com/Sirupsen/logrus"
@@ -151,6 +150,7 @@ func (n *NNTPClient) GroupScanForward(dbh *db.Handle, group string, limit int) (
 	begin := g.Last + 1
 	totalArticles := 0
 	missedMessages := 0
+	remaining := newMessages
 	for begin < maxToGet {
 		toGet := begin + int64(n.MaxScan) - 1
 		if toGet > maxToGet {
@@ -159,7 +159,8 @@ func (n *NNTPClient) GroupScanForward(dbh *db.Handle, group string, limit int) (
 		if toGet < begin {
 			toGet = begin
 		}
-		ctxLogger.Debugf("Getting %d-%d", begin, toGet)
+		remaining = remaining - toGet
+		ctxLogger.Debugf("Getting %d-%d (%d remaining)", begin, toGet, remaining)
 		overviews, err := n.c.Overview(begin, toGet)
 		if err != nil {
 			return len(overviews), err
@@ -199,21 +200,32 @@ func (n *NNTPClient) GroupScanForward(dbh *db.Handle, group string, limit int) (
 	return totalArticles, nil
 }
 
-var segmentRegexp = regexp.MustCompile(`\((\d+)[\/](\d+)\)`)
+var (
+	segmentRegexp   = regexp.MustCompile(`^\s*(.+)\s+\((\d+)\/(\d+)\)`)
+	yencRegexp      = regexp.MustCompile(`(?i)yenc`)
+	blacklistRegexp = regexp.MustCompile(`(?i)Usenet Index Post`)
+)
 
+// Translated from nzedb Binaries.php and pynab handling
+// Save all messages that match a basic regex as segments and
 func saveOverviewBatch(dbh *db.Handle, group string, overviews []nntp.MessageOverview, missed types.MessageNumberSet) error {
 	parts := map[string]*types.Part{}
 
 	for _, o := range overviews {
+		//TODO: make this a function call
+		if blacklistRegexp.MatchString(o.Subject) {
+			continue
+		}
 		m := segmentRegexp.FindStringSubmatch(o.Subject)
 		if m != nil {
-			segNum, _ := strconv.Atoi(m[1])
-			segTotal, _ := strconv.Atoi(m[2])
-			// Strip the segment information to match the subject to other parts
-			newSub := strings.Replace(o.Subject, m[0], "", -1)
-			newSub = strings.TrimSpace(newSub)
+			subj := m[1]
+			if !yencRegexp.MatchString(subj) {
+				subj += " yEnc"
+			}
+			segNum, _ := strconv.Atoi(m[2])
+			segTotal, _ := strconv.Atoi(m[3])
 
-			hash := hashOverview(newSub, o.From, group, segTotal)
+			hash := hashOverview(subj, o.From, group, segTotal)
 			seg := types.Segment{
 				MessageID: o.MessageID,
 				Segment:   segNum,
@@ -224,7 +236,7 @@ func saveOverviewBatch(dbh *db.Handle, group string, overviews []nntp.MessageOve
 			} else {
 				parts[hash] = &types.Part{
 					Hash:          hash,
-					Subject:       newSub,
+					Subject:       subj,
 					Posted:        o.Date,
 					From:          o.From,
 					GroupName:     group,

@@ -4,6 +4,7 @@ import (
 	"crypto/sha1"
 	"fmt"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -14,51 +15,109 @@ import (
 	"github.com/jinzhu/gorm"
 )
 
-func (d *Handle) getRegexesForGroups(groupNames []string, includeWildCard bool) ([]types.Regex, error) {
-	var regexesToUse []types.Regex
+var (
+	musicGroupRegex = regexp.MustCompile(`\.(flac|lossless|mp3|music|sounds)`)
 
-	if includeWildCard {
-		groupNames = append(groupNames, ".*")
-	}
-	err := d.DB.Where("group_name in (?)", groupNames).Order("ordinal").Find(&regexesToUse).Error
-	if err != nil {
-		return nil, fmt.Errorf("Error getting regexes to use: %v", err)
-	}
+	// File/part count.
+	genericSubjectCleaner1 = regexp.MustCompile(`(?i)((( \(\d\d\) -|(\d\d)? - \d\d\.|\d{4} \d\d -) | - \d\d-| \d\d\. [a-z]).+| \d\d of \d\d| \dof\d)\.mp3"?|(\)|\(|\[|\s)\d{1,5}(\/|(\s|_)of(\s|_)|-)\d{1,5}(\)|\]|\s|$|:)|\(\d{1,3}\|\d{1,3}\)|[^\d]{4}-\d{1,3}-\d{1,3}\.|\s\d{1,3}\sof\s\d{1,3}\.|\s\d{1,3}\/\d{1,3}|\d{1,3}of\d{1,3}\.|^\d{1,3}\/\d{1,3}\s|\d{1,3} - of \d{1,3}`)
 
-	var goodRegexes []types.Regex
-	for _, r := range regexesToUse {
-		err = r.Compile()
-		if err != nil {
-			logrus.Errorf("Regex %d compile error: %v", r.ID, err)
-			continue
-		}
-		goodRegexes = append(goodRegexes, r)
-	}
+	// File extensions.
+	genericSubjectCleaner2 = regexp.MustCompile(`(?i)([-_](proof|sample|thumbs?))*(\.part\d*(\.rar)?|\.rar|\.7z)?(\d{1,3}\.rev"|\.vol\d+\+\d+.+?"|\.[A-Za-z0-9]{2,4}"|")`)
 
-	logrus.Debugf("got %d regex to use for groups", len(goodRegexes))
-	return goodRegexes, nil
+	// File extensions - If it was not in quotes.
+	genericSubjectCleaner3 = regexp.MustCompile(`(?i)(-? [a-z0-9]+-?|\(?\d{4}\)?(_|-)[a-z0-9]+)\.jpg"?| [a-z0-9]+\.mu3"?|((\d{1,3})?\.part(\d{1,5})?|\d{1,5} ?|sample|- Partie \d+)?\.(7z|avi|diz|docx?|epub|idx|iso|jpg|m3u|m4a|mds|mkv|mobi|mp4|nfo|nzb|par(\s?2|")|pdf|rar|rev|rtf|r\d\d|sfv|srs|srr|sub|txt|vol.+(par2)|xls|zip|z{2,3})"?|(\s|(\d{2,3})?-)\d{2,3}\.mp3|\d{2,3}\.pdf|\.part\d{1,4}\.`)
+
+	// File Sizes - Non unique ones.
+	genericSubjectCleaner4 = regexp.MustCompile(`(?i)\d{1,3}(,|\.|\/)\d{1,3}\s(k|m|g)b|(\])?\s\d+KB\s(yENC)?|"?\s\d+\sbytes?|[- ]?\d+(\.|,)?\d+\s(g|k|m)?B\s-?(\s?yenc)?|\s\(d{1,3},\d{1,3}\s{K,M,G}B\)\s|yEnc \d+k$|{\d+ yEnc bytes}|yEnc \d+ |\(\d+ ?(k|m|g)?b(ytes)?\) yEnc$`)
+
+	// Random stuff.
+	genericSubjectCleaner5 = regexp.MustCompile(`(?i)/AutoRarPar\d{1,5}|\(\d+\)( |  )yEnc|\d+(Amateur|Classic)| \d{4,}[a-z]{4,} |part\d+`)
+
+	// Multi spaces.
+	genericSubjectCleaner6 = regexp.MustCompile(`\s\s+`)
+)
+
+// NameCleaner rewrites a given string based on it's regexes and a set of
+// fallback rules.
+type NameCleaner struct {
+	Regexes []*types.Regex
 }
 
-// MakeBinaries scans for new parts (where binary_id is NULL) and tries to
-// assemble them into Binaries.
-//
-// It does this by applying Regex patterns to their subjects and extracting
-// information.
-func (d *Handle) MakeBinaries() error {
-	var partGroups []string
-	err := d.DB.Model(&types.Part{}).Group("group_name").Pluck("group_name", &partGroups).Error
-	if err != nil {
-		return fmt.Errorf("Error getting group names for new parts: %v", err)
+// NewNameCleaner returns a new NameCleaner.  It will call Compile() on all
+// given regexes.
+func NewNameCleaner(regexes []*types.Regex) *NameCleaner {
+	for _, r := range regexes {
+		r.Compile()
 	}
+	return &NameCleaner{Regexes: regexes}
+}
 
-	regexesToUse, err := d.getRegexesForGroups(partGroups, true)
-	if len(regexesToUse) < 1 {
-		return fmt.Errorf("No regexes found, have you imported any?")
+// Clean will return a rewritten name.
+func (n *NameCleaner) Clean(name, groupname string) string {
+	for _, r := range n.Regexes {
+		if !r.CompiledGroupRegex.Regex.MatchString(groupname) {
+			continue
+		}
+		m := r.Compiled.FindStringSubmatchMap(name)
+		if len(m) == 0 {
+			continue
+		}
+		// Sort keynames and then concatinate values in that order
+		var keys = make([]string, len(m))
+		i := 0
+		for k := range m {
+			keys[i] = k
+			i++
+		}
+		sort.Strings(keys)
+		var parts = make([]string, len(m))
+		for i, k := range keys {
+			parts[i] = m[k]
+		}
+		return strings.Join(parts, "")
 	}
+	return n.subjectCleaner(name, groupname)
+}
+
+func (n *NameCleaner) subjectCleaner(subject, groupname string) string {
+	// try collections regex
+	if !musicGroupRegex.MatchString(groupname) {
+		subject = genericSubjectCleaner1.ReplaceAllString(subject, " ")
+		subject = genericSubjectCleaner2.ReplaceAllString(subject, " ")
+		subject = genericSubjectCleaner3.ReplaceAllString(subject, " ")
+		subject = genericSubjectCleaner4.ReplaceAllString(subject, " ")
+		subject = genericSubjectCleaner5.ReplaceAllString(subject, " ")
+		subject = genericSubjectCleaner6.ReplaceAllString(subject, " ")
+		return strings.TrimSpace(subject)
+	}
+	//TODO: handle music subject cleaning
+	return subject
+}
+
+var partPartsRegex = regexp.MustCompile(`(?i)[[(\s](\d{1,5})(\/|[\s_]of[\s_]|-)(\d{1,5})[])\s$:]`)
+
+func getPartsFromSubject(subject string) (int, int) {
+	part, totalparts := 0, 0
+	partmatches := partPartsRegex.FindStringSubmatch(subject)
+	if len(partmatches) > 0 {
+		totalparts, _ = strconv.Atoi(partmatches[3])
+		part, _ = strconv.Atoi(partmatches[1])
+	}
+	return part, totalparts
+}
+
+// MakeBinaries makes binaries using the nzedb approach
+func (d *Handle) MakeBinaries() error {
+	var regex []*types.Regex
+	err := d.DB.Table("collection_regex").Find(&regex).Error
+	if err != nil {
+		return err
+	}
+	cleaner := NewNameCleaner(regex)
 
 	var parts []types.Part
 	var partCount int64
-	err = d.DB.Where("group_name in (?) AND binary_id is NULL", partGroups).Find(&parts).Count(&partCount).Error
+	err = d.DB.Where("binary_id is NULL").Find(&parts).Count(&partCount).Error
 	if err != nil {
 		return err
 	}
@@ -67,53 +126,28 @@ func (d *Handle) MakeBinaries() error {
 	binaries := map[string]*types.Binary{}
 	t := time.Now()
 	for _, p := range parts {
-		matched := false
-		for _, r := range regexesToUse {
-			if !strings.HasPrefix(p.GroupName, r.GroupName) && r.GroupName != ".*" {
-				continue
-			}
-			matches, err := matchPart(r.Compiled, &p)
-			if err != nil {
-				continue
-			}
-			logrus.WithFields(logrus.Fields{
-				"subject": p.Subject,
-				"group":   p.GroupName,
-				"regex":   fmt.Sprintf("%d (%s)", r.ID, r.GroupName),
-			}).Debugf("Matched part.")
-			matched = true
-			partcounts := strings.SplitN(matches["parts"], "/", 2)
+		cleanedSubject := cleaner.Clean(p.Subject, p.GroupName)
+		_, totalparts := getPartsFromSubject(p.Subject)
 
-			binhash := makeHash(matches["name"], p.GroupName, p.From, partcounts[1])
-			if bin, ok := binaries[binhash]; ok {
-				bin.Parts = append(bin.Parts, p)
-			} else {
-				b, err := d.FindBinaryByHash(binhash)
-				if err != nil {
-					logrus.Debugf("New binary found: %s", matches["name"])
-					totalparts, _ := strconv.Atoi(partcounts[1])
-					binaries[binhash] = &types.Binary{
-						Hash:       binhash,
-						Name:       matches["name"],
-						Posted:     p.Posted,
-						From:       p.From,
-						Parts:      []types.Part{p},
-						GroupName:  p.GroupName,
-						TotalParts: totalparts,
-					}
-				} else {
-					b.Parts = append(b.Parts, p)
-					binaries[binhash] = b
+		binhash := makeHash(cleanedSubject, p.GroupName, p.From, strconv.Itoa(totalparts))
+		if bin, ok := binaries[binhash]; ok {
+			bin.Parts = append(bin.Parts, p)
+		} else {
+			b, err := d.FindBinaryByHash(binhash)
+			if err != nil {
+				logrus.Debugf("New binary found: %s", cleanedSubject)
+				binaries[binhash] = &types.Binary{
+					Hash:       binhash,
+					Name:       p.Subject,
+					Posted:     p.Posted,
+					From:       p.From,
+					Parts:      []types.Part{p},
+					GroupName:  p.GroupName,
+					TotalParts: totalparts,
 				}
-			}
-			break
-		}
-
-		if !matched {
-			logrus.Infof("Couldn't match %s with any regex, deleting.", p.Subject)
-			err = d.DB.Delete(p).Error
-			if err != nil {
-				return err
+			} else {
+				b.Parts = append(b.Parts, p)
+				binaries[binhash] = b
 			}
 		}
 	}
@@ -131,6 +165,12 @@ func (d *Handle) MakeBinaries() error {
 	logrus.Infof("Saved %d binaries to db in %s", len(binaries), time.Since(dbt))
 	logrus.Infof("Processed %d binaries from %d parts in %s", len(binaries), len(parts), time.Since(t))
 	return nil
+
+	// Get name cleaner and load regexes
+	// Find all parts with no binary
+	// Gen hash of that part and see if a Binary already exists
+	// If so, add part
+	// If not create Binary and add part
 }
 
 // SaveBinary will efficently save a binary and it's associated parts.
@@ -146,7 +186,7 @@ func saveBinary(tx *gorm.DB, b *types.Binary) error {
 			return txerr
 		}
 		pids := make([]int64, len(parts))
-		for i, p := range b.Parts {
+		for i, p := range parts {
 			pids[i] = p.ID
 		}
 		txerr = tx.Model(types.Part{}).Where("id IN (?)", pids).Updates(map[string]interface{}{"binary_id": b.ID}).Error
@@ -175,69 +215,4 @@ func makeHash(hashargs ...string) string {
 	h := xxhash.New64()
 	h.Write([]byte(strings.Join(hashargs, ".")))
 	return fmt.Sprintf("%x", h.Sum64())
-}
-
-// partRegex is the fallback regex to find parts.
-var partRegex = regexp.MustCompile(`(?i)[\[\( ]((\d{1,3}\/\d{1,3})|(\d{1,3} of \d{1,3})|(\d{1,3}-\d{1,3})|(\d{1,3}~\d{1,3}))[\)\] ]`)
-
-func matchPart(r *types.RegexpUtil, p *types.Part) (map[string]string, error) {
-	m := r.FindStringSubmatchMap(p.Subject)
-	for k, v := range m {
-		m[k] = strings.TrimSpace(v)
-	}
-	// fill name if reqid is available
-	if reqid, ok := m["reqid"]; ok {
-		if _, okname := m["name"]; !okname {
-			m["name"] = reqid
-		}
-	}
-
-	// Generate a name if we don't have one
-	if _, ok := m["name"]; !ok {
-		matchvalues := make([]string, len(m))
-		i := 0
-		for _, v := range m {
-			matchvalues[i] = v
-			i++
-		}
-		m["name"] = strings.Join(matchvalues, " ")
-	}
-
-	// Look for parts manually if the regex didn't return some
-	if _, ok := m["parts"]; !ok {
-		partmatch := partRegex.FindStringSubmatch(p.Subject)
-		if partmatch != nil {
-			m["parts"] = partmatch[1]
-		}
-	}
-	if !hasNameAndParts(m) {
-		return m, fmt.Errorf("Couldn't find Name and Parts for %s\n", p.Subject)
-	}
-
-	// Clean name of '-', '~', ' of '
-	if strings.Index(m["parts"], "/") == -1 {
-		m["parts"] = strings.Replace(m["parts"], "-", "/", -1)
-		m["parts"] = strings.Replace(m["parts"], "~", "/", -1)
-		m["parts"] = strings.Replace(m["parts"], " of ", "/", -1)
-		m["parts"] = strings.Replace(m["parts"], "[", "", -1)
-		m["parts"] = strings.Replace(m["parts"], "]", "", -1)
-		m["parts"] = strings.Replace(m["parts"], "(", "", -1)
-		m["parts"] = strings.Replace(m["parts"], ")", "", -1)
-	}
-
-	if strings.Index(m["parts"], "/") == -1 {
-		return nil, fmt.Errorf("Couldn't find valid parts information for %s (%s didn't include /)\n", p.Subject, m["parts"])
-	}
-	return m, nil
-}
-
-func hasNameAndParts(m map[string]string) bool {
-	var nameok, partok bool
-	if _, nameok = m["name"]; nameok {
-		nameok = m["name"] != ""
-	}
-	if _, partok = m["parts"]; partok {
-		partok = m["parts"] != ""
-	}
-	return nameok && partok
 }

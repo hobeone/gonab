@@ -8,11 +8,13 @@ import (
 
 //Group struct
 type Group struct {
-	ID     int64
-	Active bool `sql:"index"`
-	First  int64
-	Last   int64
-	Name   string `sql:"unique"`
+	ID       int64
+	Active   bool `sql:"index"`
+	First    int64
+	Last     int64
+	Name     string `sql:"unique"`
+	MinFiles int
+	MinSize  int64
 }
 
 //Release struct
@@ -106,23 +108,39 @@ type MissedMessage struct {
 
 // Regex Comment
 type Regex struct {
-	ID          int
-	Regex       string `sql:"size:2048"`
-	Description string
-	Status      bool
-	Ordinal     int
-	GroupName   string
-	Compiled    *RegexpUtil `sql:"-"` // Ignore for DB
+	ID                 int
+	Regex              string `sql:"size:2048"`
+	Description        string
+	Status             bool
+	Ordinal            int
+	GroupRegex         string
+	Kind               string
+	Compiled           *RegexpUtil `sql:"-"` // Ignore for DB
+	CompiledGroupRegex *RegexpUtil `sql:"-"` // Ignore for DB
 }
 
 // Compile the Regex and stores it in the Compiled attribute.
+// CompiledGroupRegex respectively.
 func (r *Regex) Compile() error {
 	c, err := regexp.Compile(r.Regex)
 	if err != nil {
 		return err
 	}
 	r.Compiled = &RegexpUtil{Regex: c}
+	c, err = regexp.Compile(r.GroupRegex)
+	if err != nil {
+		return err
+	}
+	r.CompiledGroupRegex = &RegexpUtil{c}
 	return nil
+}
+
+//TableName sets the name of the table to use when querying the db
+func (r Regex) TableName() string {
+	if r.Kind == "collection" {
+		return "collection_regex"
+	}
+	return "regex"
 }
 
 // DBCategory maps category information from the DB to a struct.  Information

@@ -16,7 +16,7 @@ func TestNzedbFileParse(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Error parsing: %v", err)
 	}
-	regexes, err := parseNzedbRegexes(content)
+	regexes, err := parseNzedbRegexes(content, "release")
 	if err != nil {
 		t.Fatalf("Error parsing: %v", err)
 	}
@@ -24,6 +24,9 @@ func TestNzedbFileParse(t *testing.T) {
 		t.Fatalf("Expected 2 regexes, got %d", len(regexes))
 	}
 
+	if regexes[0].Kind != "release" {
+		t.Fatalf("Expecte regex Kind to be 'release', got %s", regexes[0].Kind)
+	}
 }
 
 func TestNewzNabFileParse(t *testing.T) {
@@ -65,7 +68,7 @@ func TestNewsNabToRegex(t *testing.T) {
 		Description: "",
 		Status:      true,
 		Ordinal:     150,
-		GroupName:   "misc.test",
+		GroupRegex:  "misc.test",
 	}
 	Expect(reg).Should(Equal(expected))
 	if !reflect.DeepEqual(reg, expected) {

@@ -2,7 +2,6 @@ package db
 
 import (
 	"fmt"
-	"regexp"
 	"testing"
 	"time"
 
@@ -10,91 +9,37 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-func TestMatchPart(t *testing.T) {
+func TestNameCleaner(t *testing.T) {
 	RegisterTestingT(t)
-	r := regexp.MustCompile(`(?i)^(?P<name>.*?\]) \[(?P<parts>\d{1,3}\/\d{1,3})`)
-
-	regex := &types.RegexpUtil{
-		Regex: r,
+	r := &types.Regex{
+		Regex:      `(?i)^(?P<name>.*?\]) \[(?P<parts>\d{1,3}\/\d{1,3})`,
+		GroupRegex: `.*`,
 	}
+	nc := NewNameCleaner([]*types.Regex{r})
 
-	part := &types.Part{
-		Subject: `Long Show Name - 01 [1080p] [01/20] - "Long Show Name - 01.mkv.rar" yEnc`,
-	}
+	subj := `Long Show Name - 01 [1080p] [01/20] - "Long Show Name - 01.mkv.rar" yEnc`
+	match := nc.Clean(subj, "misc.test")
+	Expect(match).Should(Equal("Long Show Name - 01 [1080p]01/20"))
 
-	match, err := matchPart(regex, part)
-	if err != nil {
-		t.Fatalf("Error matching: %v", err)
-	}
-	Expect(match).Should(HaveKeyWithValue("name", "Long Show Name - 01 [1080p]"))
-	Expect(match).Should(HaveKeyWithValue("parts", "01/20"))
-
-	// Default part matcher
-	r = regexp.MustCompile(`(?i)^(?P<name>.*?\]) `)
-	match, err = matchPart(regex, part)
-	if err != nil {
-		t.Fatalf("Error matching: %v", err)
-	}
-	Expect(match).Should(HaveKeyWithValue("parts", "01/20"))
+	nc = NewNameCleaner([]*types.Regex{})
+	match = nc.Clean(subj, "misc.test")
+	Expect(match).Should(Equal("Long Show Name - 01 [1080p] - Long Show Name - yEnc"))
 }
 
 // nzedb uses match0, match1... instead of parts and name for their capture
 // groups.
 func TestMatchPartWithNzedbRegex(t *testing.T) {
 	RegisterTestingT(t)
-	r := regexp.MustCompile(`^\[\d+\/\d+ (?P<match1>.+?)(\.(part\d*|rar|avi|iso|mp4|mkv|mpg))?(\d{1,3}\.rev"|\.vol.+?"|\.[A-Za-z0-9]{2,4}"|") yEnc$`)
-	regex := &types.RegexpUtil{
-		Regex: r,
+	r := &types.Regex{
+		Regex:      `^\[\d+\/\d+ (?P<match1>.+?)(\.(part\d*|rar|avi|iso|mp4|mkv|mpg))?(\d{1,3}\.rev"|\.vol.+?"|\.[A-Za-z0-9]{2,4}"|") yEnc$`,
+		GroupRegex: `.*`,
 	}
+	nc := NewNameCleaner([]*types.Regex{r})
 
-	part := &types.Part{
-		Subject: `[04/20 Geroellheimer - S03E19 - Freudige ?berraschung Geroellheimer - S03E19 - Freudige ?berraschung.mp4.004" yEnc`,
-	}
+	subj := `[04/20] Geroellheimer - S03E19 - Freudige Überraschung Geroellheimer - S03E19 - Freudige Überraschung.mp4.004" yEnc`
 
-	match, err := matchPart(regex, part)
-	if err != nil {
-		t.Fatalf("Error matching: %v", err)
-	}
-	Expect(match).Should(HaveKeyWithValue("parts", "04/20"))
-	Expect(match).Should(HaveKeyWithValue("name", "Geroellheimer - S03E19 - Freudige ?berraschung Geroellheimer - S03E19 - Freudige ?berraschung"))
-}
-
-func TestGetRegexesForGroups(t *testing.T) {
-	RegisterTestingT(t)
-	groups := []string{"misc.test"}
-	dbh := NewMemoryDBHandle(true)
-
-	r := types.Regex{
-		GroupName: ".*",
-	}
-	dbh.DB.Save(&r)
-
-	regs, err := dbh.getRegexesForGroups(groups, true)
-	if err != nil {
-		t.Fatalf("Error getting regexes: %v", err)
-	}
-	Expect(regs).To(HaveLen(1))
-
-	regs, err = dbh.getRegexesForGroups(groups, false)
-	if err != nil {
-		t.Fatalf("Error getting regexes: %v", err)
-	}
-	Expect(regs).To(BeEmpty())
-
-	r = types.Regex{
-		GroupName: "misc.test",
-	}
-	dbh.DB.Save(&r)
-	regs, err = dbh.getRegexesForGroups(groups, false)
-	if err != nil {
-		t.Fatalf("Error getting regexes: %v", err)
-	}
-	Expect(regs).To(HaveLen(1))
-	regs, err = dbh.getRegexesForGroups(groups, true)
-	if err != nil {
-		t.Fatalf("Error getting regexes: %v", err)
-	}
-	Expect(regs).To(HaveLen(2))
+	match := nc.Clean(subj, "misc.text")
+	Expect(match).Should(Equal("Geroellheimer - S03E19 - Freudige Überraschung Geroellheimer - S03E19 - Freudige Überraschung yEnc"))
 }
 
 /*
@@ -106,15 +51,10 @@ func TestGetRegexesForGroups(t *testing.T) {
  */
 func TestMakeBinaries(t *testing.T) {
 	RegisterTestingT(t)
-	dbh := NewMemoryDBHandle(true)
+	dbh := NewMemoryDBHandle(false, false)
 	err := loadFixtures(dbh)
 	if err != nil {
 		t.Fatalf("Error creating fixtures: %v", err)
-	}
-
-	err = dbh.MakeBinaries()
-	if err == nil {
-		t.Fatalf("Expected MakeBinaries to error with no regexes.")
 	}
 
 	err = loadRegexFixtures(dbh)
@@ -127,22 +67,23 @@ func TestMakeBinaries(t *testing.T) {
 		t.Fatalf("Error creating binaries: %v", err)
 	}
 
-	bin, err := dbh.FindBinaryByName("Long Show Name - 01 [1080p]")
+	bin, err := dbh.FindBinaryByName(`Long Show Name - 01 [1080p] [01/01] - "Long Show Name - 01.mkv.rar" yEnc`)
+
 	if err != nil {
 		t.Fatalf("Error finding expected binary: %v", err)
 	}
-	Expect(bin.TotalParts).To(Equal(2))
+	Expect(bin.TotalParts).To(Equal(1))
 
-	//TODO: make binaries were binary exists and new parts are added.
+	//TODO: make binaries where binary exists and new parts are added.
 }
 
 func loadRegexFixtures(dbh *Handle) error {
 	r := `(?i)^(?P<name>.*?\]) \[(?P<parts>\d{1,3}\/\d{1,3})`
 
 	regex := &types.Regex{
-		GroupName: "misc.test",
-		Regex:     r,
-		Ordinal:   1,
+		GroupRegex: ".*",
+		Regex:      r,
+		Ordinal:    1,
 	}
 	return dbh.DB.Save(regex).Error
 }
@@ -164,7 +105,7 @@ func loadFixtures(dbh *Handle) error {
 
 	part := types.Part{
 		Hash:          "abcdefg1234",
-		Subject:       `Long Show Name - 01 [1080p] [01/02] - "Long Show Name - 01.mkv.rar" yEnc`,
+		Subject:       `Long Show Name - 01 [1080p] [01/01] - "Long Show Name - 01.mkv.rar" yEnc`,
 		TotalSegments: 2,
 		Posted:        time.Now(),
 		From:          "foo@bar.com",
@@ -174,5 +115,12 @@ func loadFixtures(dbh *Handle) error {
 	}
 
 	err := dbh.DB.Save(&part).Error
+	if err != nil {
+		return err
+	}
+	g := types.Group{
+		Name: "misc.test",
+	}
+	err = dbh.DB.Save(&g).Error
 	return err
 }

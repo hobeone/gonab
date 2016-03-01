@@ -10,10 +10,10 @@ import (
 )
 
 func TestSearch(t *testing.T) {
-	dbh := db.NewMemoryDBHandle(false)
+	dbh := db.NewMemoryDBHandle(false, false)
 	n := configRoutes(dbh)
 
-	req, err := http.NewRequest("GET", "/api?t=search&q=foo&apikey=123", nil)
+	req, err := http.NewRequest("GET", "/gonab/api?t=search&q=foo&apikey=123", nil)
 	if err != nil {
 		t.Fatalf("Error setting up request: %s", err)
 	}

@@ -36,8 +36,9 @@ type dbConfig struct {
 }
 
 type regexSource struct {
-	Type string // nnplus or nzedb
-	URL  string
+	Type          string // nnplus or nzedb
+	URL           string
+	CollectionURL string // only for nzedb
 }
 
 // NewConfig returns a new Config struct with defaults filled out

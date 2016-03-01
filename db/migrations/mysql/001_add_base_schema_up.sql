@@ -1,5 +1,3 @@
-/*!40101 SET @saved_cs_client     = @@character_set_client */;
-/*!40101 SET character_set_client = utf8 */;
 CREATE TABLE `binary` (
   `id` bigint(20) NOT NULL AUTO_INCREMENT,
   `hash` varchar(16) DEFAULT NULL,
@@ -13,9 +11,6 @@ CREATE TABLE `binary` (
   KEY `idx_binary_name` (`name`),
   KEY `idx_binary_hash` (`hash`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8 ROW_FORMAT=DYNAMIC;
-/*!40101 SET character_set_client = @saved_cs_client */;
-/*!40101 SET @saved_cs_client     = @@character_set_client */;
-/*!40101 SET character_set_client = utf8 */;
 CREATE TABLE `group` (
   `id` bigint(20) NOT NULL AUTO_INCREMENT,
   `active` tinyint(1) DEFAULT NULL,
@@ -26,9 +21,6 @@ CREATE TABLE `group` (
   UNIQUE KEY `name` (`name`),
   KEY `idx_group_active` (`active`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8 ROW_FORMAT=DYNAMIC;
-/*!40101 SET character_set_client = @saved_cs_client */;
-/*!40101 SET @saved_cs_client     = @@character_set_client */;
-/*!40101 SET character_set_client = utf8 */;
 CREATE TABLE `missed_message` (
   `id` bigint(20) NOT NULL AUTO_INCREMENT,
   `message_number` bigint(20) DEFAULT NULL,
@@ -38,9 +30,6 @@ CREATE TABLE `missed_message` (
   KEY `idx_missed_message_group_name` (`group_name`),
   KEY `idx_missed_message_message_number` (`message_number`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8 ROW_FORMAT=DYNAMIC;
-/*!40101 SET character_set_client = @saved_cs_client */;
-/*!40101 SET @saved_cs_client     = @@character_set_client */;
-/*!40101 SET character_set_client = utf8 */;
 CREATE TABLE `part` (
   `id` bigint(20) NOT NULL AUTO_INCREMENT,
   `hash` varchar(16) DEFAULT NULL,
@@ -58,21 +47,29 @@ CREATE TABLE `part` (
   KEY `idx_part_binary_id` (`binary_id`),
   KEY `idx_part_posted` (`posted`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8 ROW_FORMAT=DYNAMIC;
-/*!40101 SET character_set_client = @saved_cs_client */;
-/*!40101 SET @saved_cs_client     = @@character_set_client */;
-/*!40101 SET character_set_client = utf8 */;
+
 CREATE TABLE `regex` (
   `id` int(11) NOT NULL AUTO_INCREMENT,
   `regex` varchar(2048) DEFAULT NULL,
   `description` varchar(255) DEFAULT NULL,
   `status` tinyint(1) DEFAULT NULL,
   `ordinal` int(11) DEFAULT NULL,
-  `group_name` varchar(255) DEFAULT NULL,
+  `group_regex` varchar(255) DEFAULT NULL,
+  `kind` varchar(255) DEFAULT NULL,
   PRIMARY KEY (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8 ROW_FORMAT=DYNAMIC;
-/*!40101 SET character_set_client = @saved_cs_client */;
-/*!40101 SET @saved_cs_client     = @@character_set_client */;
-/*!40101 SET character_set_client = utf8 */;
+
+CREATE TABLE `collection_regex` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `regex` varchar(2048) DEFAULT NULL,
+  `description` varchar(255) DEFAULT NULL,
+  `status` tinyint(1) DEFAULT NULL,
+  `ordinal` int(11) DEFAULT NULL,
+  `group_regex` varchar(255) DEFAULT NULL,
+  `kind` varchar(255) DEFAULT NULL,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8 ROW_FORMAT=DYNAMIC;
+
 CREATE TABLE `release` (
   `id` bigint(20) NOT NULL AUTO_INCREMENT,
   `hash` varchar(255) DEFAULT NULL,
@@ -93,9 +90,6 @@ CREATE TABLE `release` (
   KEY `idx_release_search_name` (`search_name`),
   PRIMARY KEY (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8 ROW_FORMAT=DYNAMIC;
-/*!40101 SET character_set_client = @saved_cs_client */;
-/*!40101 SET @saved_cs_client     = @@character_set_client */;
-/*!40101 SET character_set_client = utf8 */;
 CREATE TABLE `segment` (
   `id` bigint(20) NOT NULL AUTO_INCREMENT,
   `segment` int(11) DEFAULT NULL,
@@ -106,4 +100,3 @@ CREATE TABLE `segment` (
   KEY `idx_segment_segment` (`segment`),
   KEY `idx_segment_part_id` (`part_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8 ROW_FORMAT=DYNAMIC;
-/*!40101 SET character_set_client = @saved_cs_client */;

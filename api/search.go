@@ -83,6 +83,7 @@ type NZB struct {
 }
 
 const maxSearchResults = 100
+const defaultLimit = 10
 
 func searchHandler(rw http.ResponseWriter, r *http.Request) {
 	rend := render.New()
@@ -91,6 +92,9 @@ func searchHandler(rw http.ResponseWriter, r *http.Request) {
 	if errs.Len() > 0 {
 		handleBindingErrors(rw, errs)
 		return
+	}
+	if searchrequest.Limit == 0 {
+		searchrequest.Limit = defaultLimit
 	}
 
 	dbh := getDB(r)
@@ -122,13 +126,13 @@ func searchHandler(rw http.ResponseWriter, r *http.Request) {
 	for i, rel := range releases {
 		sr.NZBs[i] = NZB{
 			Title:       rel.Name,
-			Link:        makeNZBUrl(rel),
+			Link:        makeNZBUrl(rel, r),
 			Size:        rel.Size,
 			Category:    rel.Category.Name,
 			Description: rel.Name,
 			GUID:        rel.Hash,
 			PermaLink:   true,
-			Comments:    fmt.Sprintf("https://localhost/nzb/details/%s#comments", rel.Hash),
+			Comments:    fmt.Sprintf("https://%s/nzb/details/%s#comments", r.Host, rel.Hash),
 			Date:        rel.Posted,
 			Group:       rel.Group.Name,
 		}
@@ -137,6 +141,6 @@ func searchHandler(rw http.ResponseWriter, r *http.Request) {
 	searchResponseTemplate.Execute(rw, sr)
 }
 
-func makeNZBUrl(rel types.Release) string {
-	return fmt.Sprintf("https://localhost/getnzb/%s", rel.Hash)
+func makeNZBUrl(rel types.Release, r *http.Request) string {
+	return fmt.Sprintf("%s/getnzb?h=%s&apikey=123", getLink(r), rel.Hash)
 }

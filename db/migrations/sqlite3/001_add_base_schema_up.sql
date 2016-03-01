@@ -38,7 +38,17 @@ CREATE TABLE "regex" (
   "description" varchar(255) DEFAULT NULL,
   "status" tinyint(1) DEFAULT NULL,
   "ordinal" INTEGER DEFAULT NULL,
-  "group_name" varchar(255) DEFAULT NULL
+  "group_regex" varchar(255) DEFAULT NULL,
+  "kind" varchar(255) DEFAULT NULL
+);
+CREATE TABLE "collection_regex" (
+  "id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+  "regex" varchar(2048) DEFAULT NULL,
+  "description" varchar(255) DEFAULT NULL,
+  "status" tinyint(1) DEFAULT NULL,
+  "ordinal" INTEGER DEFAULT NULL,
+  "group_regex" varchar(255) DEFAULT NULL,
+  "kind" varchar(255) DEFAULT NULL
 );
 CREATE TABLE "release" (
   "id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,

@@ -19,11 +19,13 @@ func (d *Handle) GetCategories() ([]*types.DBCategory, error) {
 
 	for _, c := range cats {
 		if c.IsParent() {
+			c.SubCategories = []types.DBCategory{}
 			catmap[int(c.ID)] = c
 		}
 	}
 	for _, c := range cats {
-		if !c.IsParent() {
+		if c.Parent != nil {
+			c.SubCategories = []types.DBCategory{}
 			if _, ok := catmap[int(c.Parent.ID)]; ok {
 				p := catmap[int(c.Parent.ID)]
 				p.SubCategories = append(p.SubCategories, *c)

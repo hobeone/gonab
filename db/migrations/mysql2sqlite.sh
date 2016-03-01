@@ -45,7 +45,7 @@ inTrigger != 0 { print; next }
 
 
 # Print all `INSERT` lines. The single quotes are protected by another single quote.
-/INSERT/ {
+/INSERT|ALTER/ {
 	gsub( /\\\047/, "\047\047" )
 	gsub(/\\n/, "\n")
 	gsub(/\\r/, "\r")

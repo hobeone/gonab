@@ -31,7 +31,7 @@ func (f *FakeNNTPConnection) Quit() error {
 func TestRegexp(t *testing.T) {
 	RegisterTestingT(t)
 
-	dbh := db.NewMemoryDBHandle(false)
+	dbh := db.NewMemoryDBHandle(false, false)
 	s := `[AnimeRG-FTS] Ajin (2016) - 02 [720p] [31FBC4AE] [16/16] - "[AnimeRG-FTS] Ajin (2016) - 02 [720p] [31FBC4AE].mkv.vol63+29.par2" yEnc (27/30)`
 	overview := nntp.MessageOverview{
 		MessageID: "<foobaz12345@foo.bar>",
@@ -76,7 +76,7 @@ func TestGroupScanWithNoNewArticles(t *testing.T) {
 	nc := NewClient(fake)
 
 	groupName := "alt.binaries.multimedia.anime"
-	dbh := db.NewMemoryDBHandle(false)
+	dbh := db.NewMemoryDBHandle(false, false)
 	g := types.Group{
 		Name:   groupName,
 		Active: true,
@@ -106,7 +106,7 @@ func TestGroupScanForward(t *testing.T) {
 	nc.SaveMissed = true
 
 	groupName := "alt.binaries.multimedia.anime"
-	dbh := db.NewMemoryDBHandle(false)
+	dbh := db.NewMemoryDBHandle(false, false)
 	g := types.Group{
 		Name:   groupName,
 		Active: true,
@@ -177,7 +177,7 @@ func TestGroupForwardScanSteps(t *testing.T) {
 	nc.MaxScan = 100
 
 	groupName := "alt.binaries.multimedia.anime"
-	dbh := db.NewMemoryDBHandle(true)
+	dbh := db.NewMemoryDBHandle(true, false)
 
 	g := types.Group{
 		Name:   groupName,

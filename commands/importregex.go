@@ -71,7 +71,7 @@ func newzNabRegexToRegex(parsed []string) (*types.Regex, error) {
 	regex := cleanRegex(parsed[3])
 	dbregex := types.Regex{
 		ID:          id,
-		GroupName:   parsed[2],
+		GroupRegex:  parsed[2],
 		Regex:       regex,
 		Status:      status,
 		Description: parsed[6],
@@ -132,7 +132,7 @@ func parseNewzNabRegexes(b []byte) ([]*types.Regex, error) {
 // 3 status
 // 4 description
 // 5 ordinal
-func nzedbRegexToRegex(parsed []string) (*types.Regex, error) {
+func nzedbRegexToRegex(parsed []string, kind string) (*types.Regex, error) {
 	if len(parsed) != 6 {
 		return nil, fmt.Errorf("nzedb regexes must be 6 items")
 	}
@@ -150,27 +150,31 @@ func nzedbRegexToRegex(parsed []string) (*types.Regex, error) {
 		return nil, fmt.Errorf("Couldn't parse ordinal %s, skipping", parsed[5])
 	}
 	regex := cleanRegex(parsed[2])
-	// nzedb has actual regexes for group names but they are mostly full group
-	// names.
 	groupname := strings.Replace(parsed[1], `\\`, "", -1)
-	groupname = strings.TrimRight(groupname, "$")
-	groupname = strings.TrimLeft(groupname, "^")
 	dbregex := types.Regex{
 		ID:          id,
-		GroupName:   groupname,
+		GroupRegex:  groupname,
 		Regex:       regex,
 		Status:      status,
 		Description: parsed[4],
 		Ordinal:     ord,
+		Kind:        kind,
 	}
 	_, err = regexp.Compile(dbregex.Regex)
 	if err != nil {
 		return nil, fmt.Errorf("Error compiling regex, skipping: %v", err)
 	}
+	_, err = regexp.Compile(dbregex.GroupRegex)
+	if err != nil {
+		return nil, fmt.Errorf("Error compiling group regex, skipping: %v", err)
+	}
+
 	return &dbregex, nil
 }
 
-func parseNzedbRegexes(b []byte) ([]*types.Regex, error) {
+// Format is tab separated:
+// id, group_regex, regex, status, description, ordinal
+func parseNzedbRegexes(b []byte, kind string) ([]*types.Regex, error) {
 	r := bufio.NewReader(bytes.NewReader(b))
 	newregexes := []*types.Regex{}
 	lines := 0
@@ -187,7 +191,7 @@ func parseNzedbRegexes(b []byte) ([]*types.Regex, error) {
 		}
 		record = strings.TrimSpace(record)
 		fields := strings.Split(record, "\t")
-		regex, err := nzedbRegexToRegex(fields)
+		regex, err := nzedbRegexToRegex(fields, kind)
 		if err != nil {
 			logrus.Errorf("Error parsing nZEDb regex (line %d): %v", lines, err)
 			continue
@@ -195,6 +199,42 @@ func parseNzedbRegexes(b []byte) ([]*types.Regex, error) {
 		newregexes = append(newregexes, regex)
 	}
 	return newregexes, nil
+}
+
+func getURL(url string) ([]byte, error) {
+	// Defaults to 1 second for connect and read
+	connectTimeout := (5 * time.Second)
+	readWriteTimeout := (15 * time.Second)
+
+	client := httpclient.NewTimeoutClient(connectTimeout, readWriteTimeout)
+
+	resp, err := client.Get(url)
+
+	if err != nil {
+		logrus.Infof("Error getting %s: %s", url, err)
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		err = fmt.Errorf("feed %s returned a non 200 status code: %s", url, resp.Status)
+		logrus.Error(err)
+		return nil, err
+	}
+	var b []byte
+	if resp.ContentLength > 0 {
+		b = make([]byte, resp.ContentLength)
+		_, err := io.ReadFull(resp.Body, b)
+		if err != nil {
+			return nil, fmt.Errorf("error reading response for %s: %s", url, err)
+		}
+	} else {
+		b, err = ioutil.ReadAll(resp.Body)
+		if err != nil {
+			return nil, fmt.Errorf("error reading response for %s: %s", url, err)
+		}
+	}
+	return b, nil
 }
 
 func (regeximporter *RegexImporter) run(c *kingpin.ParseContext) error {
@@ -207,45 +247,27 @@ func (regeximporter *RegexImporter) run(c *kingpin.ParseContext) error {
 	url := cfg.Regex.URL
 	logrus.Infof("Crawling %v", url)
 
-	// Defaults to 1 second for connect and read
-	connectTimeout := (5 * time.Second)
-	readWriteTimeout := (15 * time.Second)
-
-	client := httpclient.NewTimeoutClient(connectTimeout, readWriteTimeout)
-
-	resp, err := client.Get(url)
-
+	b, err := getURL(url)
 	if err != nil {
-		logrus.Infof("Error getting %s: %s", url, err)
 		return err
 	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		err = fmt.Errorf("feed %s returned a non 200 status code: %s", url, resp.Status)
-		logrus.Error(err)
-		return err
-	}
-	var b []byte
-	if resp.ContentLength > 0 {
-		b = make([]byte, resp.ContentLength)
-		_, err := io.ReadFull(resp.Body, b)
+	var collectionRegexRaw []byte
+	if cfg.Regex.CollectionURL != "" {
+		logrus.Infof("CollectionURL set, crawling: %s", cfg.Regex.CollectionURL)
+		collectionRegexRaw, err = getURL(cfg.Regex.CollectionURL)
 		if err != nil {
-			return fmt.Errorf("error reading response for %s: %s", url, err)
-		}
-	} else {
-		b, err = ioutil.ReadAll(resp.Body)
-		if err != nil {
-			return fmt.Errorf("error reading response for %s: %s", url, err)
+			return err
 		}
 	}
 
 	var regexes []*types.Regex
+	var collectionRegexes []*types.Regex
 	switch cfg.Regex.Type {
 	case "nnplus":
 		regexes, err = parseNewzNabRegexes(b)
 	case "nzedb":
-		regexes, err = parseNzedbRegexes(b)
+		regexes, err = parseNzedbRegexes(b, "release")
+		collectionRegexes, err = parseNzedbRegexes(collectionRegexRaw, "collection")
 	default:
 		return fmt.Errorf("Unknown Regex type: %s", cfg.Regex.Type)
 	}
@@ -262,6 +284,16 @@ func (regeximporter *RegexImporter) run(c *kingpin.ParseContext) error {
 		err = tx.Create(dbregex).Error
 		if err != nil {
 			logrus.Errorf("Error saving regex: %v", err)
+			tx.Rollback()
+			return err
+		}
+		newcount++
+	}
+	tx.Where("id < ?", 100000).Delete(&types.Regex{Kind: "collection"})
+	for _, dbregex := range collectionRegexes {
+		err = tx.Create(dbregex).Error
+		if err != nil {
+			logrus.Errorf("Error saving collection regex: %v", err)
 			tx.Rollback()
 			return err
 		}

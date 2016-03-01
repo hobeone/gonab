@@ -5,6 +5,7 @@ package api
 import (
 	"fmt"
 	"net/http"
+	"strings"
 
 	"github.com/Sirupsen/logrus"
 	"github.com/codegangsta/negroni"
@@ -18,6 +19,10 @@ import (
 	"github.com/rs/cors"
 )
 
+const (
+	webroot = "/gonab"
+)
+
 // RunAPIServer sets up and starts a server to provide the NewzNab API
 func RunAPIServer(cfg *config.Config) {
 	dbh := db.NewDBHandle(cfg.DB.Name, cfg.DB.Username, cfg.DB.Password, cfg.DB.Verbose)
@@ -27,7 +32,7 @@ func RunAPIServer(cfg *config.Config) {
 }
 
 func configRoutes(dbh *db.Handle) *negroni.Negroni {
-	r := mux.NewRouter()
+	r := mux.NewRouter().PathPrefix(webroot).Subrouter()
 	r.HandleFunc("/api", capsHandler).Queries("t", "caps")
 	r.HandleFunc("/api", searchHandler).Queries("t", "search")
 	r.HandleFunc("/api", tvSearchHandler).Queries("t", "tvsearch")
@@ -63,4 +68,34 @@ func dbMiddleware(dbh *db.Handle) negroni.Handler {
 
 func homeHandler(rw http.ResponseWriter, r *http.Request) {
 	fmt.Fprintln(rw, "home")
+}
+
+func getLink(r *http.Request) string {
+	host := r.Header.Get("X-Forwarded-Host")
+	port := r.Header.Get("X-Forwarded-Port")
+	proto := r.Header.Get("X-Forwarded-Proto")
+	if host == "" {
+		host, port = getHostAndPort(r)
+	}
+	if proto == "" {
+		proto = "http"
+	}
+	if port != "" {
+		host = fmt.Sprintf("%s:%s", host, port)
+	}
+	return fmt.Sprintf("%s://%s%s", proto, host, webroot)
+}
+
+// getHost tries its best to return the request host.
+// From github.com/gorilla/reverse
+func getHostAndPort(r *http.Request) (string, string) {
+	host := r.Host
+	if host == "" {
+		host = r.URL.Host
+	}
+	if host != "" && strings.Contains(host, ":") {
+		parts := strings.SplitN(host, ":", 2)
+		return parts[0], parts[1]
+	}
+	return "", ""
 }

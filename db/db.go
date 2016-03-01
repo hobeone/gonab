@@ -79,7 +79,7 @@ func NewDBHandle(dbname, dbuser, dbpass string, verbose bool) *Handle {
 // The name of the database is a random string so multiple tests can run in
 // parallel with their own database.  This will setup the database with the
 // all the tables as well.
-func NewMemoryDBHandle(verbose bool) *Handle {
+func NewMemoryDBHandle(verbose bool, loadFixtures bool) *Handle {
 	// The DSN is super important here. https://www.sqlite.org/inmemorydb.html
 	// We want a named in memory db with a shared cache so that multiple
 	// connections from the database layer share the cache but each call to this
@@ -94,6 +94,18 @@ func NewMemoryDBHandle(verbose bool) *Handle {
 	err = migrator.Migrate()
 	if err != nil {
 		panic(err)
+	}
+
+	if loadFixtures {
+		// load Fixtures
+		migrator, err = gomigrate.NewMigrator(gormdb.DB(), gomigrate.Sqlite3{}, "../db/testdata/fixtures")
+		if err != nil {
+			panic(err)
+		}
+		err = migrator.Migrate()
+		if err != nil {
+			panic(err)
+		}
 	}
 
 	return &Handle{DB: gormdb}
